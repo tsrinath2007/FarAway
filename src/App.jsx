@@ -636,7 +636,10 @@ export default function App() {
             {mapLayers.secondary && SECONDARY_HUBS.map((hub) => (
               <g key={hub.name} opacity="0.6">
                 <circle cx={hub.x} cy={hub.y} r="2.5" fill="#38BDF8" />
-                <circle cx={hub.x} cy={hub.y} r="5" fill="none" stroke="#38BDF8" strokeWidth="0.8" className="beacon-pulse-ring" />
+                <circle cx={hub.x} cy={hub.y} r="2.5" fill="none" stroke="#38BDF8" strokeWidth="0.8">
+                  <animate attributeName="r" values="2.5;7.5;2.5" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2.4s" repeatCount="indefinite" />
+                </circle>
               </g>
             ))}
 
@@ -649,8 +652,11 @@ export default function App() {
                   <circle cx={city.x} cy={city.y} r="10" fill="#10B981" fillOpacity="0.12" />
                   {/* Inner green core */}
                   <circle cx={city.x} cy={city.y} r="4" fill="#10B981" className="glow-green" />
-                  {/* Pulse ring */}
-                  <circle cx={city.x} cy={city.y} r="8" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                  {/* Pulse ring (Stable SVG Anim) */}
+                  <circle cx={city.x} cy={city.y} r="4" fill="none" stroke="#10B981" strokeWidth="0.8">
+                    <animate attributeName="r" values="4;10;4" dur="2s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2s" repeatCount="indefinite" />
+                  </circle>
                 </g>
               );
             })}
@@ -672,8 +678,11 @@ export default function App() {
                 <circle cx={trainPos.x} cy={trainPos.y} r="12" fill="#FBBF24" fillOpacity="0.15" />
                 <circle cx={trainPos.x} cy={trainPos.y} r="4.5" fill="#FBBF24" className="glow-yellow" />
                 
-                {/* Dynamic scan sweep ripple */}
-                <circle cx={trainPos.x} cy={trainPos.y} r="18" fill="none" stroke="#FBBF24" strokeWidth="1" className="pulse-marker" />
+                {/* Dynamic scan sweep ripple (Stable SVG Anim) */}
+                <circle cx={trainPos.x} cy={trainPos.y} r="4.5" fill="none" stroke="#FBBF24" strokeWidth="1">
+                  <animate attributeName="r" values="4.5;18;4.5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 
                 {/* Telemetry Pointer Leader Line */}
                 <path 
@@ -714,7 +723,11 @@ export default function App() {
                 {/* RED PULSING CRACK DOT AT BHUBANESWAR */}
                 <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="14" fill="#EF4444" fillOpacity="0.15" />
                 <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="5" fill="#EF4444" className="glow-red" />
-                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="22" fill="none" stroke="#EF4444" strokeWidth="1.5" className="pulse-marker" />
+                {/* Dynamic scan sweep ripple (Stable SVG Anim) */}
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="5" fill="none" stroke="#EF4444" strokeWidth="1.5">
+                  <animate attributeName="r" values="5;22;5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 
                 {/* Target Reticle Crosshair */}
                 <g stroke="#EF4444" strokeWidth="1">
@@ -763,7 +776,10 @@ export default function App() {
                 {/* Train #22846 approaching from Chennai (x=317, y=477) */}
                 <circle cx="317" cy="477" r="12" fill="#F59E0B" fillOpacity="0.15" />
                 <circle cx="317" cy="477" r="4.5" fill="#F59E0B" className="glow-yellow" />
-                <circle cx="317" cy="477" r="18" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="pulse-marker" />
+                <circle cx="317" cy="477" r="4.5" fill="none" stroke="#F59E0B" strokeWidth="0.8">
+                  <animate attributeName="r" values="4.5;18;4.5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 <line x1="317" y1="477" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#EF4444" strokeWidth="1.2" strokeDasharray="3 3" strokeOpacity="0.7" />
                 
                 {/* Train 1 Telemetry Pointer Line */}
@@ -794,7 +810,10 @@ export default function App() {
                 {/* Train #18401 approaching from Kolkata (x=395, y=388) */}
                 <circle cx="395" cy="388" r="12" fill="#F59E0B" fillOpacity="0.15" />
                 <circle cx="395" cy="388" r="4.5" fill="#F59E0B" className="glow-yellow" />
-                <circle cx="395" cy="388" r="18" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="pulse-marker" />
+                <circle cx="395" cy="388" r="4.5" fill="none" stroke="#F59E0B" strokeWidth="0.8">
+                  <animate attributeName="r" values="4.5;18;4.5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 <line x1="395" y1="388" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#EF4444" strokeWidth="1.2" strokeDasharray="3 3" strokeOpacity="0.7" />
                 
                 {/* Train 2 Telemetry Pointer Line */}
@@ -834,7 +853,10 @@ export default function App() {
                 {/* Warned Train A stops (green check) */}
                 <circle cx="317" cy="477" r="12" fill="#10B981" fillOpacity="0.15" />
                 <circle cx="317" cy="477" r="4.5" fill="#10B981" className="glow-green" />
-                <circle cx="317" cy="477" r="18" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                <circle cx="317" cy="477" r="4.5" fill="none" stroke="#10B981" strokeWidth="0.8">
+                  <animate attributeName="r" values="4.5;18;4.5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 
                 <path 
                   d="M 317 477 L 277 477 L 277 437 H 217" 
@@ -864,7 +886,10 @@ export default function App() {
                 {/* Warned Train B stops (green check) */}
                 <circle cx="395" cy="388" r="12" fill="#10B981" fillOpacity="0.15" />
                 <circle cx="395" cy="388" r="4.5" fill="#10B981" className="glow-green" />
-                <circle cx="395" cy="388" r="18" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                <circle cx="395" cy="388" r="4.5" fill="none" stroke="#10B981" strokeWidth="0.8">
+                  <animate attributeName="r" values="4.5;18;4.5" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.8s" repeatCount="indefinite" />
+                </circle>
                 
                 <path 
                   d="M 395 388 L 435 388 L 435 348 H 485" 
@@ -894,7 +919,10 @@ export default function App() {
                 {/* Repair Crew dispatched near Bhubaneswar */}
                 <g transform="translate(378, 420)" className="animate-bounce">
                   <rect x="-4" y="-4" width="8" height="8" rx="1.5" fill="#3B82F6" className="glow-blue" />
-                  <circle cx="0" cy="0" r="10" fill="none" stroke="#3B82F6" strokeWidth="1.2" className="beacon-pulse-ring" />
+                  <circle cx="0" cy="0" r="2" fill="none" stroke="#3B82F6" strokeWidth="1.2">
+                    <animate attributeName="r" values="2;10;2" dur="2.2s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2.2s" repeatCount="indefinite" />
+                  </circle>
                 </g>
                 
                 <path 
