@@ -4,49 +4,68 @@ const path = require('path');
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 
-// Default seeded data structure
+// Helper to seed 50 default track sections
+const generateDefaultSections = () => {
+  const sections = [];
+  for (let i = 501; i <= 550; i++) {
+    sections.push({
+      sectionId: 'TRK-' + i,
+      healthScore: 100,
+      status: 'SAFE',
+      confidence: 0,
+      lastUpdated: new Date().toISOString()
+    });
+  }
+  return sections;
+};
+
+// Default seeded data structure with realistic train numbers
 const DEFAULT_DB = {
   trains: [
     {
-      id: 'TRAIN-101',
-      name: 'Mumbai Express',
-      route: 'mumbai-delhi',
-      speed: 110,
-      baseSpeed: 110,
-      position: 0.1, // fraction along route (0 to 1)
+      id: '12727',
+      name: '12727 (Express)',
+      route: 'mumbai-delhi', // Vijayawada → Visakhapatnam
+      speed: 78,
+      baseSpeed: 78,
+      position: 0.1,
       vibration: 1.2,
       status: 'NORMAL',
+      currentSection: 'TRK-502',
       alertActive: false,
       alertMessage: '',
       sensorStatus: 'HEALTHY'
     },
     {
-      id: 'TRAIN-202',
-      name: 'Kolkata Mail',
-      route: 'delhi-kolkata',
+      id: '12805',
+      name: '12805 (Superfast)',
+      route: 'delhi-kolkata', // New Delhi → Howrah
       speed: 100,
       baseSpeed: 100,
       position: 0.45,
       vibration: 0.95,
       status: 'NORMAL',
+      currentSection: 'TRK-522',
       alertActive: false,
       alertMessage: '',
       sensorStatus: 'HEALTHY'
     },
     {
-      id: 'TRAIN-303',
-      name: 'Chennai Coastal',
-      route: 'kolkata-chennai',
-      speed: 120,
-      baseSpeed: 120,
+      id: '12645',
+      name: '12645 (Mail)',
+      route: 'kolkata-chennai', // Kolkata → Chennai
+      speed: 115,
+      baseSpeed: 115,
       position: 0.8,
       vibration: 1.4,
       status: 'NORMAL',
+      currentSection: 'TRK-547',
       alertActive: false,
       alertMessage: '',
       sensorStatus: 'HEALTHY'
     }
   ],
+  sections: generateDefaultSections(),
   faults: [],
   logs: [
     {
@@ -58,7 +77,7 @@ const DEFAULT_DB = {
     {
       id: 'log-1',
       timestamp: new Date().toISOString(),
-      message: 'Active scanning channels established on Delhi, Mumbai, Kolkata, Chennai rail grids.',
+      message: 'Active scanning channels established. 50 track sectors (TRK-501 to TRK-550) mapped.',
       type: 'info'
     }
   ],

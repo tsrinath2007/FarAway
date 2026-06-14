@@ -58,6 +58,15 @@ const SECONDARY_HUBS = [
 
 export default function App() {
   // UI & Network state
+  const [toasts, setToasts] = useState([]);
+  const addToast = (message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+
   const [kpis, setKpis] = useState({
     trackHealthScore: 100,
     activeTrains: 3,
@@ -65,9 +74,10 @@ export default function App() {
     alertsSentToday: 0
   });
   const [trains, setTrains] = useState([]);
+  const [sections, setSections] = useState([]);
   const [faults, setFaults] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [selectedTrainId, setSelectedTrainId] = useState('TRAIN-101');
+  const [selectedTrainId, setSelectedTrainId] = useState('12727');
   const [isSimulating, setIsSimulating] = useState(true);
   const [time, setTime] = useState(new Date());
 
@@ -76,9 +86,9 @@ export default function App() {
   const [injectSegment, setInjectSegment] = useState(30);
   const [injectSeverity, setInjectSeverity] = useState('CRITICAL');
   const [trainFaultToggles, setTrainFaultToggles] = useState({
-    'TRAIN-101': false,
-    'TRAIN-202': false,
-    'TRAIN-303': false
+    '12727': false,
+    '12805': false,
+    '12645': false
   });
 
   // Map state
@@ -107,27 +117,35 @@ export default function App() {
   // Fetch all backend stats
   const fetchAllData = async () => {
     try {
-      const [kpiRes, trainRes, faultRes, logRes] = await Promise.all([
+      console.log('Fetching system status and track section reports...');
+      const [kpiRes, trainRes, faultRes, logRes, sectionRes] = await Promise.all([
         fetch('/api/kpis').then(r => r.json()),
         fetch('/api/trains').then(r => r.json()),
         fetch('/api/faults').then(r => r.json()),
-        fetch('/api/logs').then(r => r.json())
+        fetch('/api/logs').then(r => r.json()),
+        fetch('/api/sections').then(r => r.json())
       ]);
+      console.log('Telemetry fetch successful.', {
+        trackHealth: kpiRes.trackHealthScore,
+        activeFaults: faultRes.length,
+        trainsOnline: trainRes.length
+      });
       setKpis(kpiRes);
       setTrains(trainRes);
       setFaults(faultRes);
       setLogs(logRes);
+      setSections(sectionRes || []);
     } catch (err) {
       console.error('Error connecting to backend services:', err);
     }
   };
 
-  // Telemetry loop: Runs every 250ms when simulation is active
+  // Telemetry loop: Runs every 800ms when simulation is active
   useEffect(() => {
     if (!isSimulating) return;
 
     const interval = setInterval(async () => {
-      // 1. Locally advance positions of simulated trains
+      console.log('Advancing train simulation cycle...');
       const data = await fetch('/api/trains').then(r => r.json()).catch(() => []);
       if (!data || data.length === 0) return;
 
@@ -155,28 +173,38 @@ export default function App() {
         }
 
         // 3. Post telemetry update
-        await fetch('/api/trains/update', {
+        const updatePayload = {
+          id: train.id,
+          position: nextPosition,
+          vibration,
+          speed: train.speed
+        };
+        console.log(`Sending /api/trains/update for Train ${train.id}:`, updatePayload);
+        const updateRes = await fetch('/api/trains/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: train.id,
-            position: nextPosition,
-            vibration,
-            speed: train.speed
-          })
-        });
+          body: JSON.stringify(updatePayload)
+        }).then(r => r.json()).catch(() => null);
+        if (updateRes) {
+          console.log(`Update success for Train ${train.id}:`, updateRes);
+        }
 
         // 4. Report sensors to consensus learning loops
-        await fetch('/api/faults/report', {
+        const reportPayload = {
+          trainId: train.id,
+          route: train.route,
+          position: nextPosition,
+          vibration
+        };
+        console.log(`Sending /api/faults/report for Train ${train.id}:`, reportPayload);
+        const reportRes = await fetch('/api/faults/report', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            trainId: train.id,
-            route: train.route,
-            position: nextPosition,
-            vibration
-          })
-        });
+          body: JSON.stringify(reportPayload)
+        }).then(r => r.json()).catch(() => null);
+        if (reportRes) {
+          console.log(`Report success for Train ${train.id}:`, reportRes);
+        }
       }
 
       // Fetch fresh global state
@@ -210,48 +238,54 @@ export default function App() {
   // Trigger manual injection
   const handleInjectFault = async (e) => {
     e.preventDefault();
+    const payload = {
+      route: injectRoute,
+      segmentIndex: parseInt(injectSegment, 10),
+      severity: injectSeverity
+    };
+    console.log('System Control Room submitting Anomaly Injection payload:', payload);
     try {
-      const res = await fetch('/api/faults/inject', {
+      const res = await fetch('/api/inject-fault', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          route: injectRoute,
-          segmentIndex: parseInt(injectSegment),
-          severity: injectSeverity
-        })
+        body: JSON.stringify(payload)
       }).then(r => r.json());
 
+      console.log('Anomaly Injector Response:', res);
       if (res.success) {
+        addToast(`Fault injected successfully in section ${res.fault.sectionId}!`, 'success');
         fetchAllData();
       } else {
-        alert(res.message);
+        addToast(`Failed: ${res.message}`, 'error');
       }
     } catch (err) {
-      console.error(err);
+      console.error('Network failure trying to inject fault:', err);
+      addToast('Network error during manual injection', 'error');
     }
   };
 
   // Reset database
   const handleReset = async () => {
+    console.log('Sending system-wide reset command to cloud...');
     try {
-      await fetch('/api/faults/clear-all', { method: 'POST' });
+      const res = await fetch('/api/faults/clear-all', { method: 'POST' }).then(r => r.json());
+      console.log('System database successfully reset:', res);
+      addToast('System database reset completed.', 'info');
       setVibHistory([]);
       setTrainFaultToggles({
-        'TRAIN-101': false,
-        'TRAIN-202': false,
-        'TRAIN-303': false
+        '12727': false,
+        '12805': false,
+        '12645': false
       });
       fetchAllData();
     } catch (err) {
-      console.error(err);
+      console.error('Reset database failed:', err);
+      addToast('Reset database failed.', 'error');
     }
   };
 
-  // Get train path coordinates along the route
-  const getTrainScreenCoords = (train) => {
-    const route = train.route;
-    const position = train.position;
-    
+  // Coordinates helper for track routes
+  const getCoordinatesForRoutePos = (route, position) => {
     if (route === 'mumbai-delhi') {
       return {
         x: 135 + position * (188 - 135),
@@ -280,6 +314,40 @@ export default function App() {
       }
     }
     return { x: 0, y: 0 };
+  };
+
+  // Get coordinates for specific section bounds
+  const getSectionCoordinates = (sectionId) => {
+    const num = parseInt(sectionId.replace('TRK-', ''), 10);
+    let route = '';
+    let startPos = 0;
+    let endPos = 0;
+    
+    if (num >= 501 && num <= 515) {
+      route = 'mumbai-delhi';
+      const idx = num - 501;
+      startPos = idx / 15;
+      endPos = (idx + 1) / 15;
+    } else if (num >= 516 && num <= 530) {
+      route = 'delhi-kolkata';
+      const idx = num - 516;
+      startPos = idx / 15;
+      endPos = (idx + 1) / 15;
+    } else if (num >= 531 && num <= 550) {
+      route = 'kolkata-chennai';
+      const idx = num - 531;
+      startPos = idx / 20;
+      endPos = (idx + 1) / 20;
+    }
+    
+    const startCoords = getCoordinatesForRoutePos(route, startPos);
+    const endCoords = getCoordinatesForRoutePos(route, endPos);
+    return { startCoords, endCoords, route };
+  };
+
+  // Get train path coordinates along the route
+  const getTrainScreenCoords = (train) => {
+    return getCoordinatesForRoutePos(train.route, train.position);
   };
 
   // Hover and Tooltip handlers for India Map
@@ -673,18 +741,79 @@ export default function App() {
             ))}
 
             {/* Glowing Railway Corridors (Neon styling) */}
-            {mapLayers.corridors && (
-              <g strokeLinecap="round">
-                {CORRIDORS.map((corridor) => (
-                  <g key={corridor.id}>
-                    <path d={corridor.path} fill="none" stroke="#020617" strokeWidth="4.5" />
-                    <path d={corridor.path} fill="none" stroke="#0EA5E9" strokeWidth="3" strokeOpacity="0.22" className="glow-neon-blue" />
-                    <path d={corridor.path} fill="none" stroke="#38BDF8" strokeWidth="1.2" strokeOpacity="0.75" />
-                    <path d={corridor.path} fill="none" stroke="#FFFFFF" strokeWidth="1.2" strokeOpacity="0.85" className="animate-track-flow" />
-                  </g>
-                ))}
-              </g>
-            )}
+            {mapLayers.corridors && Array.from({ length: 50 }, (_, i) => {
+              const id = `TRK-${501 + i}`;
+              const sec = sections.find(s => s.sectionId === id) || { sectionId: id, status: 'SAFE', healthScore: 100 };
+              
+              const { startCoords, endCoords } = getSectionCoordinates(id);
+              
+              let color = '#10B981'; // safe green
+              let glowClass = 'glow-neon-green';
+              let isPulsing = false;
+              
+              if (sec.status === 'CRITICAL' || sec.status === 'CONFIRMED FAULT') {
+                color = '#EF4444'; // critical red
+                glowClass = 'glow-neon-red';
+                isPulsing = true;
+              } else if (sec.status === 'WARNING') {
+                color = '#F59E0B'; // warning amber
+                glowClass = 'glow-neon-amber';
+                isPulsing = true;
+              }
+              
+              return (
+                <g key={id}>
+                  {/* Thick dark background line */}
+                  <line 
+                    x1={startCoords.x} 
+                    y1={startCoords.y} 
+                    x2={endCoords.x} 
+                    y2={endCoords.y} 
+                    stroke="#020617" 
+                    strokeWidth="4.5" 
+                    strokeLinecap="round" 
+                  />
+                  {/* Neon glowing line */}
+                  <line 
+                    x1={startCoords.x} 
+                    y1={startCoords.y} 
+                    x2={endCoords.x} 
+                    y2={endCoords.y} 
+                    stroke={color} 
+                    strokeWidth="3.5" 
+                    strokeOpacity="0.22" 
+                    strokeLinecap="round" 
+                    className={glowClass} 
+                  />
+                  {/* Core sharp line */}
+                  <line 
+                    x1={startCoords.x} 
+                    y1={startCoords.y} 
+                    x2={endCoords.x} 
+                    y2={endCoords.y} 
+                    stroke={color} 
+                    strokeWidth="1.2" 
+                    strokeOpacity="0.75" 
+                    strokeLinecap="round" 
+                    className={isPulsing ? 'animate-pulse' : ''}
+                  />
+                  {/* Ambient path flow indicator */}
+                  {sec.status === 'SAFE' && (
+                    <line 
+                      x1={startCoords.x} 
+                      y1={startCoords.y} 
+                      x2={endCoords.x} 
+                      y2={endCoords.y} 
+                      stroke="#FFFFFF" 
+                      strokeWidth="1.2" 
+                      strokeOpacity="0.85" 
+                      strokeLinecap="round" 
+                      className="animate-track-flow" 
+                    />
+                  )}
+                </g>
+              );
+            })}
 
             {/* Secondary Network Nodes (Ambient Beacons) */}
             {mapLayers.secondary && SECONDARY_HUBS.map((hub) => (
@@ -726,7 +855,9 @@ export default function App() {
                 {/* Floating Sector label */}
                 <g transform={`translate(${fault.coords.x + 14}, ${fault.coords.y - 4})`}>
                   <rect x="-2" y="-6" width="60" height="9" rx="1" fill="#020617" stroke="#EF4444" strokeWidth="0.6" fillOpacity="0.85" />
-                  <text x="0" y="1" fill="#EF4444" fontSize="5.5" fontFamily="monospace" fontWeight="bold">ANOMALY {fault.segmentIndex}%</text>
+                  <text x="0" y="1" fill="#EF4444" fontSize="5.5" fontFamily="monospace" fontWeight="bold">
+                    {fault.sectionId || `ANOMALY {fault.segmentIndex}%`}
+                  </text>
                 </g>
               </g>
             ))}
@@ -980,29 +1111,38 @@ export default function App() {
             <div className="flex-1 flex flex-col justify-around gap-2.5 mt-1">
               {['mumbai-delhi', 'delhi-kolkata', 'kolkata-chennai'].map(route => {
                 const routeFaults = faults.filter(f => f.route === route && f.status === 'ACTIVE');
+                const sectionsList = 
+                  route === 'mumbai-delhi' ? Array.from({ length: 15 }, (_, i) => `TRK-${501 + i}`) :
+                  route === 'delhi-kolkata' ? Array.from({ length: 15 }, (_, i) => `TRK-${516 + i}`) :
+                  Array.from({ length: 20 }, (_, i) => `TRK-${531 + i}`);
+
                 return (
                   <div key={route} className="flex flex-col gap-1">
                     <div className="flex justify-between items-center text-[9px] font-mono text-slate-500">
                       <span className="uppercase">{route.replace('-', ' → ')}</span>
-                      <span className={routeFaults.length > 0 ? 'text-red-400' : 'text-emerald-400'}>
+                      <span className={routeFaults.length > 0 ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                         {routeFaults.length > 0 ? `${routeFaults.length} FAULT ZONE(S)` : 'SECURED'}
                       </span>
                     </div>
-                    <div className="grid grid-cols-20 gap-0.5 h-3 bg-slate-950 border border-slate-900 rounded-sm overflow-hidden">
-                      {Array.from({ length: 20 }).map((_, idx) => {
-                        const segmentMin = idx * 5;
-                        const segmentMax = (idx + 1) * 5;
+                    <div 
+                      className="grid gap-0.5 h-3 bg-slate-950 border border-slate-900 rounded-sm overflow-hidden"
+                      style={{ gridTemplateColumns: `repeat(${sectionsList.length}, minmax(0, 1fr))` }}
+                    >
+                      {sectionsList.map((secId) => {
+                        const sec = sections.find(s => s.sectionId === secId) || { status: 'SAFE', healthScore: 100 };
                         
-                        // Check if an active fault sits in this segment block range
-                        const hasFault = routeFaults.some(
-                          f => f.segmentIndex >= segmentMin && f.segmentIndex < segmentMax
-                        );
+                        let colorClass = 'bg-emerald-500/80 hover:bg-emerald-400';
+                        if (sec.status === 'CRITICAL' || sec.status === 'CONFIRMED FAULT') {
+                          colorClass = 'bg-red-500 glow-red animate-pulse';
+                        } else if (sec.status === 'WARNING') {
+                          colorClass = 'bg-amber-500 glow-orange';
+                        }
 
                         return (
                           <div 
-                            key={idx}
-                            className={`h-full border-r border-slate-950/20 ${hasFault ? 'bg-red-500 glow-red animate-pulse' : 'bg-emerald-500/80 hover:bg-emerald-400'}`}
-                            title={`Segment ${segmentMin}% - ${segmentMax}%`}
+                            key={secId}
+                            className={`h-full border-r border-slate-950/20 ${colorClass}`}
+                            title={`${secId} (Health: ${sec.healthScore}%, Status: ${sec.status})`}
                           />
                         );
                       })}
@@ -1022,7 +1162,7 @@ export default function App() {
                 <thead>
                   <tr className="border-b border-slate-900 text-slate-500">
                     <th className="pb-1.5">ROUTE</th>
-                    <th className="pb-1.5 text-center">SEGMENT</th>
+                    <th className="pb-1.5 text-center">SECTION</th>
                     <th className="pb-1.5 text-center">CONFIDENCE</th>
                     <th className="pb-1.5 text-right">STATUS</th>
                   </tr>
@@ -1036,7 +1176,7 @@ export default function App() {
                     faults.slice(0, 5).map(fault => (
                       <tr key={fault.id}>
                         <td className="py-1 uppercase">{fault.route.replace('-', ' → ')}</td>
-                        <td className="py-1 text-center">{fault.segmentIndex}%</td>
+                        <td className="py-1 text-center font-bold text-sky-400">{fault.sectionId || 'N/A'}</td>
                         <td className="py-1 text-center">{fault.confidence} / 5</td>
                         <td className={`py-1 text-right font-bold ${fault.status === 'ACTIVE' ? 'text-red-400 animate-pulse' : 'text-slate-500'}`}>
                           {fault.status}
@@ -1051,6 +1191,24 @@ export default function App() {
 
         </div>
       </footer>
+
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+        {toasts.map(toast => (
+          <div 
+            key={toast.id} 
+            className={`pointer-events-auto px-4 py-2.5 rounded-lg border text-sm font-mono flex items-center gap-2 shadow-lg animate-fade-in ${
+              toast.type === 'success' 
+                ? 'bg-emerald-950/90 text-emerald-400 border-emerald-500/30' 
+                : toast.type === 'error'
+                ? 'bg-red-950/90 text-red-400 border-red-500/30'
+                : 'bg-slate-900/90 text-slate-300 border-slate-700/30'
+            }`}
+          >
+            <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
 
     </div>
   );

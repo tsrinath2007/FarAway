@@ -46,6 +46,13 @@ function getCoordinatesForPosition(route, position) {
   return { x: 0, y: 0 };
 }
 
+// Route sections mapping
+const routeSections = {
+  'mumbai-delhi': Array.from({ length: 15 }, (_, i) => `TRK-${501 + i}`),
+  'delhi-kolkata': Array.from({ length: 15 }, (_, i) => `TRK-${516 + i}`),
+  'kolkata-chennai': Array.from({ length: 20 }, (_, i) => `TRK-${531 + i}`)
+};
+
 // REST APIs
 
 // 1. GET /api/kpis - Retrieve top KPIs
@@ -53,16 +60,9 @@ app.get('/api/kpis', (req, res) => {
   const data = db.get();
   const activeFaults = data.faults.filter(f => f.status === 'ACTIVE');
   
-  // Calculate aggregate track health score: base 100, drops by 15 for each critical, 8 for warnings
-  let health = 100;
-  activeFaults.forEach(f => {
-    if (f.severity === 'CRITICAL') {
-      health -= 15;
-    } else {
-      health -= 8;
-    }
-  });
-  health = Math.max(0, Math.min(100, health));
+  // Calculate aggregate track health score: average of all 50 sections
+  const totalHealth = data.sections.reduce((sum, s) => sum + s.healthScore, 0);
+  const health = Math.max(0, Math.min(100, Math.round(totalHealth / data.sections.length)));
 
   res.json({
     trackHealthScore: health,
@@ -90,14 +90,88 @@ app.get('/api/logs', (req, res) => {
   res.json(data.logs);
 });
 
-// 5. POST /api/faults/clear-all - Reset database
+// 5. GET /api/sections - Get all 50 track sections
+app.get('/api/sections', (req, res) => {
+  const data = db.get();
+  res.json(data.sections || []);
+});
+
+// 6. POST /api/faults/clear-all - Reset database
 app.post('/api/faults/clear-all', (req, res) => {
   const data = db.reset();
   db.addLog('System database was reset. Active warnings and history cleared.', 'warning');
   res.json({ success: true, message: 'Database reset successful', data });
 });
 
-// 6. POST /api/faults/inject - Manually inject an anomaly
+// 7. POST /api/inject-fault - Manually inject an anomaly
+app.post('/api/inject-fault', (req, res) => {
+  const { route, segmentIndex, severity } = req.body;
+  
+  if (!route || segmentIndex === undefined || !severity) {
+    return res.status(400).json({ error: 'Missing route, segmentIndex, or severity' });
+  }
+
+  const data = db.get();
+  
+  // Check if route is valid
+  const sectionsList = routeSections[route];
+  if (!sectionsList) {
+    return res.status(400).json({ error: 'Invalid route' });
+  }
+
+  // Calculate position and map to sectionId
+  const position = segmentIndex / 100;
+  let idx = Math.floor(position * sectionsList.length);
+  if (idx >= sectionsList.length) idx = sectionsList.length - 1;
+  const sectionId = sectionsList[idx];
+
+  // Check if active fault already exists on this section
+  const existingFault = data.faults.find(
+    f => f.sectionId === sectionId && f.status === 'ACTIVE'
+  );
+
+  if (existingFault) {
+    return res.json({ success: false, message: `An active fault already exists in section ${sectionId}.` });
+  }
+
+  // Create new fault
+  const coords = getCoordinatesForPosition(route, position);
+  const corridorName = route.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
+  
+  const newFault = {
+    id: `fault-${Date.now()}`,
+    sectionId,
+    route,
+    segmentIndex,
+    position,
+    coords,
+    severity: severity.toUpperCase(),
+    corridor: corridorName,
+    detectedBy: 'SYSTEM',
+    timestamp: new Date().toISOString(),
+    confidence: 1,
+    status: 'ACTIVE',
+    vibrationPeak: severity.toUpperCase() === 'CRITICAL' ? 6.2 : 3.8
+  };
+
+  data.faults.unshift(newFault);
+  
+  // Update section DB status
+  const section = data.sections.find(s => s.sectionId === sectionId);
+  if (section) {
+    section.status = severity.toUpperCase();
+    section.healthScore = severity.toUpperCase() === 'CRITICAL' ? 20 : 50;
+    section.confidence = 1;
+    section.lastUpdated = new Date().toISOString();
+  }
+
+  db.save(data);
+  db.addLog(`⚠️ ANOMALY INJECTED: Critical track fracture detected on [${corridorName}] corridor at section [${sectionId}]`, 'critical');
+
+  res.json({ success: true, fault: newFault });
+});
+
+// Alias for old endpoint to be safe
 app.post('/api/faults/inject', (req, res) => {
   const { route, segmentIndex, severity } = req.body;
   
@@ -107,43 +181,60 @@ app.post('/api/faults/inject', (req, res) => {
 
   const data = db.get();
   
-  // Check if active fault already exists in segment range
+  const sectionsList = routeSections[route];
+  if (!sectionsList) {
+    return res.status(400).json({ error: 'Invalid route' });
+  }
+
+  const position = segmentIndex / 100;
+  let idx = Math.floor(position * sectionsList.length);
+  if (idx >= sectionsList.length) idx = sectionsList.length - 1;
+  const sectionId = sectionsList[idx];
+
   const existingFault = data.faults.find(
-    f => f.route === route && 
-         f.status === 'ACTIVE' && 
-         Math.abs(f.segmentIndex - segmentIndex) <= 3
+    f => f.sectionId === sectionId && f.status === 'ACTIVE'
   );
 
   if (existingFault) {
-    return res.json({ success: false, message: 'An active fault already exists in this sector.' });
+    return res.json({ success: false, message: `An active fault already exists in section ${sectionId}.` });
   }
 
-  // Create new fault
-  const position = segmentIndex / 100;
   const coords = getCoordinatesForPosition(route, position);
+  const corridorName = route.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
   
   const newFault = {
     id: `fault-${Date.now()}`,
+    sectionId,
     route,
     segmentIndex,
     position,
     coords,
     severity: severity.toUpperCase(),
+    corridor: corridorName,
+    detectedBy: 'SYSTEM',
     timestamp: new Date().toISOString(),
-    trainId: 'CONTROL-ROOM',
-    vibrationPeak: severity.toUpperCase() === 'CRITICAL' ? 6.2 : 3.8,
-    confidence: 3, // start with confidence 3 for manual injections
-    status: 'ACTIVE'
+    confidence: 1,
+    status: 'ACTIVE',
+    vibrationPeak: severity.toUpperCase() === 'CRITICAL' ? 6.2 : 3.8
   };
 
   data.faults.unshift(newFault);
+  
+  const section = data.sections.find(s => s.sectionId === sectionId);
+  if (section) {
+    section.status = severity.toUpperCase();
+    section.healthScore = severity.toUpperCase() === 'CRITICAL' ? 20 : 50;
+    section.confidence = 1;
+    section.lastUpdated = new Date().toISOString();
+  }
+
   db.save(data);
-  db.addLog(`⚠️ ANOMALY INJECTED: Critical track fracture detected on [${route.replace('-', ' to ')}] corridor at segment [${segmentIndex}%]`, 'critical');
+  db.addLog(`⚠️ ANOMALY INJECTED: Critical track fracture detected on [${corridorName}] corridor at section [${sectionId}]`, 'critical');
 
   res.json({ success: true, fault: newFault });
 });
 
-// 7. POST /api/trains/update - Update train position and test warnings
+// 8. POST /api/trains/update - Update train position and test warnings
 app.post('/api/trains/update', (req, res) => {
   const { id, position, vibration, speed } = req.body;
   if (!id || position === undefined) {
@@ -161,64 +252,50 @@ app.post('/api/trains/update', (req, res) => {
   train.vibration = parseFloat(vibration || 0.8);
   if (speed !== undefined) train.speed = parseFloat(speed);
 
-  // Map position to a 0-100 track segment index
-  const trainSegment = Math.floor(train.position * 100);
+  // Map position to section ID and find 3 sections ahead
+  const sectionsList = routeSections[train.route] || [];
+  if (sectionsList.length > 0) {
+    const currentIdx = Math.floor(train.position * sectionsList.length) % sectionsList.length;
+    train.currentSection = sectionsList[currentIdx];
 
-  // Find active faults on this train's route
-  const activeFaults = data.faults.filter(f => f.route === train.route && f.status === 'ACTIVE');
-  
-  let closestWarning = null;
-  let shouldSlowDown = false;
+    // Find next 3 sections ahead in loop path
+    const nextSections = [
+      sectionsList[(currentIdx + 1) % sectionsList.length],
+      sectionsList[(currentIdx + 2) % sectionsList.length],
+      sectionsList[(currentIdx + 3) % sectionsList.length]
+    ];
 
-  activeFaults.forEach(fault => {
-    // Check if fault is ahead of train. Because it is a loop, we check both normal ahead and loop wrap
-    // We trigger warning if fault is within 12 segments ahead (braking distance)
-    let diff = fault.segmentIndex - trainSegment;
-    
-    // Handle route wrap-around (e.g. train is at 95, fault is at 3, route length is 100)
-    if (diff < -80) {
-      diff += 100; // loop wrap
-    }
+    // Check if any of these sections has an active fault
+    const faultySection = nextSections.find(secId => 
+      data.faults.some(f => f.sectionId === secId && f.status === 'ACTIVE')
+    );
 
-    if (diff > 0 && diff <= 12) {
-      shouldSlowDown = true;
-      if (!closestWarning || diff < closestWarning.diff) {
-        closestWarning = {
-          faultId: fault.id,
-          severity: fault.severity,
-          segmentIndex: fault.segmentIndex,
-          distance: diff,
-          diff
-        };
+    if (faultySection) {
+      if (!train.alertActive) {
+        train.alertActive = true;
+        data.kpis.alertsSentToday += 1;
+        db.addLog(`📲 SIGNALING ALERT: Speed forced to 30 km/h for [${train.name}] approaching active fault section [${faultySection}]`, 'warning');
       }
-    }
-  });
-
-  if (shouldSlowDown && closestWarning) {
-    if (!train.alertActive) {
-      train.alertActive = true;
-      data.kpis.alertsSentToday += 1;
-      db.addLog(`📲 SIGNALING ALERT: Speed forced to 30 km/h for [${train.name}] approaching active fault sector [${closestWarning.segmentIndex}%]`, 'warning');
-    }
-    train.status = 'SLOWING';
-    train.speed = 30; // restricted speed limit
-    train.alertMessage = `⚠️ RESTRICTED SPEED: Anomaly ahead in ${closestWarning.distance}% segment. Reduce speed recommended.`;
-  } else {
-    if (train.alertActive) {
-      train.alertActive = false;
-      train.status = 'NORMAL';
-      train.speed = train.baseSpeed;
-      train.alertMessage = '';
-      db.addLog(`✅ Track cleared. [${train.name}] cleared danger zone and resumed standard speed (${train.baseSpeed} km/h).`, 'info');
+      train.status = 'SLOWING';
+      train.speed = 30; // restricted speed limit
+      train.alertMessage = `⚠️ RESTRICTED SPEED: Anomaly ahead in section ${faultySection}. Reduce speed recommended.`;
+    } else {
+      if (train.alertActive) {
+        train.alertActive = false;
+        train.status = 'NORMAL';
+        train.speed = train.baseSpeed;
+        train.alertMessage = '';
+        db.addLog(`✅ Track cleared. [${train.name}] cleared danger zone and resumed standard speed (${train.baseSpeed} km/h).`, 'info');
+      }
     }
   }
 
   data.trains[trainIndex] = train;
   db.save(data);
-  res.json({ train, closestWarning });
+  res.json({ train });
 });
 
-// 8. POST /api/faults/report - Consensus & Auto-clear reporting loop
+// 9. POST /api/faults/report - Consensus & Auto-clear reporting loop
 app.post('/api/faults/report', (req, res) => {
   const { trainId, route, position, vibration } = req.body;
   if (!trainId || !route || position === undefined || vibration === undefined) {
@@ -228,64 +305,106 @@ app.post('/api/faults/report', (req, res) => {
   const data = db.get();
   const train = data.trains.find(t => t.id === trainId);
   const trainName = train ? train.name : trainId;
-  const segmentIndex = Math.floor(parseFloat(position) * 100);
+  const positionVal = parseFloat(position);
   const vibVal = parseFloat(vibration);
 
-  // Search for an existing active fault in the reported sector (within +/- 3% segment tolerance)
+  const sectionsList = routeSections[route] || [];
+  if (sectionsList.length === 0) {
+    return res.status(400).json({ error: 'Invalid route' });
+  }
+  const currentIdx = Math.floor(positionVal * sectionsList.length) % sectionsList.length;
+  const sectionId = sectionsList[currentIdx];
+
+  const section = data.sections.find(s => s.sectionId === sectionId);
   const existingFaultIndex = data.faults.findIndex(
-    f => f.route === route && 
-         f.status === 'ACTIVE' && 
-         Math.abs(f.segmentIndex - segmentIndex) <= 3
+    f => f.sectionId === sectionId && f.status === 'ACTIVE'
   );
 
   if (vibVal >= 3.5) {
-    // ----------------------------------------------------
-    // CASE A: HIGH VIBRATION SPIKE DETECTED (TRACK FAULT)
-    // ----------------------------------------------------
+    // Spike detected
     if (existingFaultIndex !== -1) {
-      // 1. Existing Anomaly: Increment Consensus Confidence
       const fault = data.faults[existingFaultIndex];
       fault.confidence = Math.min(5, fault.confidence + 1);
       fault.vibrationPeak = Math.max(fault.vibrationPeak, vibVal);
       fault.timestamp = new Date().toISOString();
-      
-      db.addLog(`🤝 CONSENSUS LEARNED: [${trainName}] verified anomaly at segment [${fault.segmentIndex}%] on [${route.replace('-', ' to ')}]. Confidence level increased to ${fault.confidence}/5.`, 'info');
+
+      if (section) {
+        section.confidence = fault.confidence;
+        section.lastUpdated = new Date().toISOString();
+        if (fault.confidence >= 3) {
+          if (section.status !== 'CONFIRMED FAULT') {
+            section.status = 'CONFIRMED FAULT';
+            section.healthScore = 15;
+            db.addLog(`🤝 CONSENSUS LEARNED: [${trainName}] verified anomaly at section [${sectionId}]. Status upgraded to CONFIRMED FAULT (Confidence: ${fault.confidence}/5)`, 'critical');
+          } else {
+            db.addLog(`🤝 CONSENSUS LEARNED: [${trainName}] verified anomaly at section [${sectionId}]. Confidence level increased to ${fault.confidence}/5.`, 'info');
+          }
+        } else {
+          db.addLog(`🤝 CONSENSUS LEARNED: [${trainName}] verified anomaly at section [${sectionId}]. Confidence level increased to ${fault.confidence}/5.`, 'info');
+        }
+      }
     } else {
-      // 2. New Anomaly: Create active track fault record
-      const coords = getCoordinatesForPosition(route, parseFloat(position));
+      // New fault
+      const coords = getCoordinatesForPosition(route, positionVal);
+      const segmentIndex = Math.floor(positionVal * 100);
+      const corridorName = route.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-');
+      
       const newFault = {
         id: `fault-${Date.now()}`,
+        sectionId,
         route,
         segmentIndex,
-        position: parseFloat(position),
+        position: positionVal,
         coords,
         severity: vibVal >= 5.5 ? 'CRITICAL' : 'WARNING',
         timestamp: new Date().toISOString(),
         trainId,
         vibrationPeak: vibVal,
         confidence: 1,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        corridor: corridorName,
+        detectedBy: 'SYSTEM'
       };
-      
+
       data.faults.unshift(newFault);
-      db.addLog(`🚨 TRACK ACCELEROMETER ALERT: [${trainName}] reported axle deflection spike of ${vibVal.toFixed(1)}G at segment [${segmentIndex}%]`, 'critical');
+      
+      if (section) {
+        section.status = newFault.severity;
+        section.healthScore = newFault.severity === 'CRITICAL' ? 20 : 50;
+        section.confidence = 1;
+        section.lastUpdated = new Date().toISOString();
+      }
+
+      db.addLog(`🚨 TRACK ACCELEROMETER ALERT: [${trainName}] reported axle deflection spike of ${vibVal.toFixed(1)}G at section [${sectionId}]`, 'critical');
     }
-  } else {
-    // ----------------------------------------------------
-    // CASE B: NORMAL VIBRATION DETECTED (TRACK HEALTHY)
-    // ----------------------------------------------------
+  } else if (vibVal < 2.0) {
+    // Normal / Healthy scan
     if (existingFaultIndex !== -1) {
-      // An active fault was reported here, but this train detected a healthy scan.
-      // Decrement confidence. If it drops to 0, mark as resolved (Auto-Clear).
       const fault = data.faults[existingFaultIndex];
       fault.confidence -= 1;
-      
-      db.addLog(`🧐 SCAN SCANNING: [${trainName}] passed segment [${fault.segmentIndex}%] with healthy readings (${vibVal.toFixed(1)}G). Confidence drops to ${fault.confidence}/5.`, 'info');
+
+      if (section) {
+        section.confidence = fault.confidence;
+        section.lastUpdated = new Date().toISOString();
+      }
+
+      db.addLog(`🧐 SCAN SCANNING: [${trainName}] passed section [${sectionId}] with healthy readings (${vibVal.toFixed(1)}G). Confidence drops to ${fault.confidence}/5.`, 'info');
 
       if (fault.confidence <= 0) {
         fault.status = 'RESOLVED';
         fault.resolvedAt = new Date().toISOString();
-        db.addLog(`✅ AUTO-CLEAR VERIFIED: Sector [${fault.segmentIndex}%] on [${route.replace('-', ' to ')}] restored to SAFE status. Health score updated to 100.`, 'info');
+        
+        if (section) {
+          section.status = 'SAFE';
+          section.healthScore = 100;
+          section.confidence = 0;
+        }
+        db.addLog(`✅ AUTO-CLEAR VERIFIED: Section [${sectionId}] restored to SAFE status. Health score updated to 100.`, 'info');
+      } else {
+        if (section && section.status === 'CONFIRMED FAULT' && fault.confidence < 3) {
+          section.status = fault.severity;
+          section.healthScore = fault.severity === 'CRITICAL' ? 20 : 50;
+        }
       }
     }
   }
@@ -299,3 +418,4 @@ app.listen(PORT, () => {
   console.log(`TrackPulse AI backend listening on port ${PORT}`);
   db.reset(); // Seed fresh db on start
 });
+
