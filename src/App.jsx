@@ -959,7 +959,7 @@ export default function App() {
             <span className="font-mono text-sky-400 font-bold">tsrinath2020</span>
           </div>
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-center md:text-right">
-            <span className="text-slate-400 font-semibold">Teammates:</span>
+            <span className="text-slate-400 font-semibold">Team Members:</span>
             <span className="text-sky-300/90 font-medium">Thota Sai Eswar Srinath <span className="text-[10px] text-sky-400 font-bold font-mono px-1 bg-sky-950/40 rounded border border-sky-900/30">Team Lead</span></span>
             <span>Bondugula Pranav Teja</span>
             <span>Pushkar Koppeti</span>
