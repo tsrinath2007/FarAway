@@ -37,6 +37,13 @@ const CITY_COORDS = {
   bhubaneswar: { x: 365, y: 405, name: 'BHUBANESWAR' }
 };
 
+// Rail Corridors path definitions
+const CORRIDORS = [
+  { id: 'mumbai-delhi', path: `M ${CITY_COORDS.mumbai.x},${CITY_COORDS.mumbai.y} L ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y}` },
+  { id: 'delhi-kolkata', path: `M ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y} L ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y}` },
+  { id: 'kolkata-chennai', path: `M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}` }
+];
+
 // Secondary nodes (ambient beacons) representing nationwide track monitoring
 const SECONDARY_HUBS = [
   { name: 'HYDERABAD', x: 250, y: 490 },
