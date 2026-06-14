@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { Train, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Train, 
+  Activity, 
+  AlertTriangle, 
+  Cpu, 
+  CheckCircle2, 
+  ChevronLeft, 
+  ChevronRight, 
+  Play, 
+  Pause,
+  Clock
+} from 'lucide-react';
 import indiaMap from '@svg-maps/india';
 
+// Coordinates scaled to 612x696 viewBox
 const CITY_COORDS = {
   delhi: { x: 188, y: 205, name: 'DELHI' },
   mumbai: { x: 135, y: 430, name: 'MUMBAI' },
@@ -10,70 +22,394 @@ const CITY_COORDS = {
   bhubaneswar: { x: 365, y: 405, name: 'BHUBANESWAR' }
 };
 
+// Simplified Count-Up Hook for Stats
+function useCountUp(target, duration = 1500) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const end = parseInt(target);
+    if (start === end) return;
+
+    const totalMiliseconds = duration;
+    const incrementTime = Math.max(Math.floor(totalMiliseconds / end), 25);
+    
+    const timer = setInterval(() => {
+      const stepValue = Math.ceil(end / (totalMiliseconds / incrementTime));
+      start += stepValue;
+      if (start >= end) {
+        clearInterval(timer);
+        setCount(end);
+      } else {
+        setCount(start);
+      }
+    }, incrementTime);
+
+    return () => clearInterval(timer);
+  }, [target, duration]);
+
+  return count;
+}
+
 export default function App() {
   const [activeStep, setActiveStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [time, setTime] = useState(new Date());
+
+  // 1. Live Ticking Clock (updates every second)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Train position state for Step 1 animation
+  const [trainPos, setTrainPos] = useState({ x: CITY_COORDS.kolkata.x, y: CITY_COORDS.kolkata.y });
+
+  // 2. Auto-play effect with sub-second progress ticks (50ms interval)
+  useEffect(() => {
+    if (!isPlaying) {
+      setProgress(0);
+      return;
+    }
+    const tickTime = 50; // ms
+    const increment = (tickTime / 3000) * 100; // 3 seconds total
+    const timer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          setActiveStep((current) => (current + 1) % 4);
+          return 0;
+        }
+        return prev + increment;
+      });
+    }, tickTime);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, activeStep]);
+
+  // Train dynamic sliding simulation in Step 1
+  useEffect(() => {
+    if (activeStep !== 0) return;
+    let t = 0;
+    const interval = setInterval(() => {
+      t = (t + 0.04) % 1.04;
+      setTrainPos({
+        x: CITY_COORDS.kolkata.x + t * (CITY_COORDS.bhubaneswar.x - CITY_COORDS.kolkata.x),
+        y: CITY_COORDS.kolkata.y + t * (CITY_COORDS.bhubaneswar.y - CITY_COORDS.kolkata.y)
+      });
+    }, 80);
+    return () => clearInterval(interval);
+  }, [activeStep]);
+
+  const handleStepSelect = (idx) => {
+    setActiveStep(idx);
+    setProgress(0);
+  };
+
+  const handlePrev = () => {
+    setActiveStep((prev) => (prev - 1 + 4) % 4);
+    setProgress(0);
+  };
+
+  const handleNext = () => {
+    setActiveStep((prev) => (prev + 1) % 4);
+    setProgress(0);
+  };
+
+  // Animate numbers for the bottom metrics cards
+  const kmCount = useCountUp(87432);
+  const faultsCount = useCountUp(14);
+  const warnedCount = useCountUp(9);
 
   return (
-    <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col font-sans select-none">
+    <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col font-sans relative overflow-hidden scanline select-none">
       
-      {/* SECTION 1: HEADER */}
+      {/* SECTION 1: HERO HEADER (MINIMAL + CLOCK) */}
       <header className="border-b border-slate-900 bg-slate-950/80 px-6 py-4 flex flex-col md:flex-row items-center justify-between z-20 gap-4">
+        {/* Logo and Icon */}
         <div className="flex items-center space-x-2.5">
-          <div className="bg-red-600 p-2 rounded flex items-center justify-center">
+          <div className="bg-red-600 p-2 rounded flex items-center justify-center animate-pulse">
             <Train className="h-5 w-5 text-white" />
           </div>
-          <h1 className="text-lg font-bold tracking-wider text-white font-mono">PULSE RAIL</h1>
+          <h1 className="text-lg font-bold tracking-wider text-white font-mono flex items-center">
+            PULSE <span className="text-red-500 ml-1">RAIL</span>
+          </h1>
         </div>
+
+        {/* Story Tagline Banner */}
         <div className="text-center flex-1 max-w-2xl px-4">
           <h2 className="text-lg md:text-xl font-bold tracking-tight text-white uppercase">
             Every train is a track inspector.
           </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            When a train detects a fault, every train behind it is warned — automatically.
+          </p>
+        </div>
+
+        {/* Right Info: Live Indicator & Clock */}
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-semibold text-emerald-400 font-mono tracking-wide">
+              SYSTEM LIVE
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-md text-slate-300">
+            <Clock className="h-4 w-4 text-slate-400" />
+            <span className="text-sm font-bold font-mono tracking-wider">
+              {time.toLocaleTimeString('en-US', { hour12: false })}
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* SECTION 2: STORY FLOW */}
+      {/* SECTION 2: THE STORY (MAIN 65% VIEWPORT HEIGHT) */}
       <main className="flex-1 px-6 py-8 flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto w-full z-10">
         
-        {/* Step List Card Deck */}
+        {/* LEFT PANEL: 4-STEP STORY SLIDESHOW */}
         <div className="flex-1 flex flex-col justify-between max-w-md">
           <div className="space-y-4">
-            <h3 className="text-xs font-mono text-slate-500 tracking-widest uppercase">
-              AUTONOMOUS PROTECTION SEQUENCE
-            </h3>
             
-            <div className={`p-4 rounded-lg border cursor-pointer ${activeStep === 0 ? 'bg-slate-900 border-blue-500' : 'bg-slate-950/30 border-slate-900 opacity-45'}`}>
-              <h4 className="text-sm font-semibold text-white">1. Train Passes Over Crack</h4>
-            </div>
-            
-            <div className={`p-4 rounded-lg border cursor-pointer ${activeStep === 1 ? 'bg-slate-900 border-red-500' : 'bg-slate-950/30 border-slate-900 opacity-45'}`}>
-              <h4 className="text-sm font-semibold text-white">2. Anomalous Deflection Verified</h4>
+            {/* Slideshow Progress Bar */}
+            <div className="flex flex-col space-y-1">
+              <h3 className="text-xs font-mono text-slate-500 tracking-widest uppercase">
+                AUTONOMOUS PROTECTION SEQUENCE
+              </h3>
+              <div className="w-full h-1 bg-slate-950 rounded-full overflow-hidden border border-slate-900 mt-1">
+                <div 
+                  className="h-full bg-gradient-to-r from-blue-500 via-red-500 to-emerald-500 transition-all duration-75"
+                  style={{ width: `${progress}%`, transition: 'width 50ms linear' }}
+                />
+              </div>
             </div>
 
-            <div className={`p-4 rounded-lg border cursor-pointer ${activeStep === 2 ? 'bg-slate-900 border-amber-500' : 'bg-slate-950/30 border-slate-900 opacity-45'}`}>
-              <h4 className="text-sm font-semibold text-white">3. Autonomous Risk Calculation</h4>
+            {/* Step 1 Card */}
+            <div 
+              onClick={() => handleStepSelect(0)}
+              className={`p-4 rounded-lg border cursor-pointer transition-all duration-300 ${
+                activeStep === 0 
+                  ? 'bg-slate-900/80 border-blue-500/80 shadow-md shadow-blue-950/40 opacity-100 scale-[1.02]' 
+                  : 'bg-slate-950/30 border-slate-900 opacity-40 hover:opacity-75'
+              }`}
+            >
+              <div className="flex items-start space-x-3">
+                <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-950 border border-blue-800 text-xs font-bold text-blue-400 font-mono">
+                  1
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-white">
+                    Train Passes Over Crack
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Passenger Train #12631 transits Bhubaneswar sector and records wheels hitting a structural rail defect.
+                  </p>
+
+                  {/* Dynamic Visual: Shaking waveform when step is active */}
+                  {activeStep === 0 && (
+                    <div className="mt-3">
+                      <span className="text-[10px] font-mono text-slate-400 block mb-1">ACCELEROMETER VIBRATION SPIKE</span>
+                      <svg viewBox="0 0 200 60" className="w-full h-12 bg-slate-950/80 border border-slate-800 rounded p-1">
+                        <line x1="0" y1="30" x2="200" y2="30" stroke="#1E293B" strokeDasharray="2 2" />
+                        <path
+                          key="waveform-s1"
+                          d="M 0,30 L 30,30 L 50,30 L 70,30 L 85,28 L 100,10 L 108,50 L 115,5 L 122,55 L 130,30 L 150,30 L 170,30 L 200,30"
+                          fill="none"
+                          stroke="#EF4444"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          className="animate-draw"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div className={`p-4 rounded-lg border cursor-pointer ${activeStep === 3 ? 'bg-slate-900 border-emerald-500' : 'bg-slate-950/30 border-slate-900 opacity-45'}`}>
-              <h4 className="text-sm font-semibold text-white">4. Alerts Sent & Safety Secured</h4>
+            {/* Step 2 Card */}
+            <div 
+              onClick={() => handleStepSelect(1)}
+              className={`p-4 rounded-lg border cursor-pointer transition-all duration-300 ${
+                activeStep === 1 
+                  ? 'bg-slate-900/80 border-red-500/80 shadow-md shadow-red-950/40 opacity-100 scale-[1.02]' 
+                  : 'bg-slate-950/30 border-slate-900 opacity-40 hover:opacity-75'
+              }`}
+            >
+              <div className="flex items-start space-x-3">
+                <span className="flex items-center justify-center h-6 w-6 rounded-full bg-red-950 border border-red-800 text-xs font-bold text-red-400 font-mono">
+                  2
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-white">
+                    Anomalous Deflection Verified
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Sensors confirm critical energy release. Anomaly flagged as severe track crack.
+                  </p>
+
+                  {/* Dynamic Visual: Warning Badge when step is active */}
+                  {activeStep === 1 && (
+                    <div className="mt-3 flex items-center space-x-3 bg-red-950/40 border border-red-900/60 rounded p-2 animate-pulse">
+                      <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                      <div className="text-[10px] font-mono text-red-400">
+                        <div className="font-bold">FAULT VERIFIED: RAIL CRACK</div>
+                        <div>COORDINATES: 20.3°N, 85.8°E // SEVERITY: CRITICAL</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 Card */}
+            <div 
+              onClick={() => handleStepSelect(2)}
+              className={`p-4 rounded-lg border cursor-pointer transition-all duration-300 ${
+                activeStep === 2 
+                  ? 'bg-slate-900/80 border-amber-500/80 shadow-md shadow-amber-950/40 opacity-100 scale-[1.02]' 
+                  : 'bg-slate-950/30 border-slate-900 opacity-40 hover:opacity-75'
+              }`}
+            >
+              <div className="flex items-start space-x-3">
+                <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-950 border border-amber-800 text-xs font-bold text-amber-400 font-mono">
+                  3
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-white">
+                    Autonomous Risk Calculation
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    AI agents query train schedules and locate two approaching trains within collision distance.
+                  </p>
+
+                  {/* Dynamic Visual: Agent processing readout */}
+                  {activeStep === 2 && (
+                    <div className="mt-3 bg-slate-950 border border-slate-800 rounded p-2 space-y-1 text-[10px] font-mono text-amber-500">
+                      <div className="flex justify-between items-center">
+                        <span className="flex items-center gap-1">
+                          <Cpu className="h-3.5 w-3.5 text-amber-500 animate-spin" style={{ animationDuration: '4s' }} />
+                          <span>COLLISION THREAT DETECTED</span>
+                        </span>
+                        <span className="font-bold">ETA: 4.2 MIN</span>
+                      </div>
+                      <div className="text-slate-500">
+                        • Train #22846 (approaching Chennai-Kolkata segment)
+                        <br />
+                        • Train #18401 (approaching Kolkata-Chennai segment)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 Card */}
+            <div 
+              onClick={() => handleStepSelect(3)}
+              className={`p-4 rounded-lg border cursor-pointer transition-all duration-300 ${
+                activeStep === 3 
+                  ? 'bg-slate-900/80 border-emerald-500/80 shadow-md shadow-emerald-950/40 opacity-100 scale-[1.02]' 
+                  : 'bg-slate-950/30 border-slate-900 opacity-40 hover:opacity-75'
+              }`}
+            >
+              <div className="flex items-start space-x-3">
+                <span className="flex items-center justify-center h-6 w-6 rounded-full bg-emerald-950 border border-emerald-800 text-xs font-bold text-emerald-400 font-mono">
+                  4
+                </span>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-white">
+                    Alerts Sent & Safety Secured
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Cab signals are forced to slow down, stopping approaching traffic. Maintenance team receives coordinates.
+                  </p>
+
+                  {/* Dynamic Visual: Safety checklist */}
+                  {activeStep === 3 && (
+                    <div key="checklist-s4" className="mt-3 bg-emerald-950/20 border border-emerald-900/40 rounded p-2 text-[10px] font-mono text-emerald-400 space-y-1">
+                      <div className="flex items-center space-x-1.5 animate-fade-in" style={{ animationDelay: '200ms' }}>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span>Train #22846 Slowed to Safe Speed</span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 animate-fade-in" style={{ animationDelay: '600ms' }}>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span>Train #18401 Slowed to Safe Speed</span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 animate-fade-in" style={{ animationDelay: '1000ms' }}>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span>Repair Crew Notified (Zone B7)</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Slideshow dot navigation panel */}
-          <div className="mt-6 flex items-center justify-end bg-slate-950 border border-slate-900 p-3 rounded-lg">
+          {/* SLIDESHOW CONTROLS */}
+          <div className="mt-6 flex items-center justify-between bg-slate-950 border border-slate-900 p-3 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="p-1.5 rounded hover:bg-slate-900 text-slate-400 hover:text-white transition-colors"
+              >
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              </button>
+              <span className="text-[10px] font-mono text-slate-500 tracking-wider">
+                {isPlaying ? 'AUTO-PLAY ACTIVE' : 'AUTO-PLAY PAUSED'}
+              </span>
+            </div>
+
+            {/* Slider Dots & Arrows */}
             <div className="flex items-center space-x-3">
-              <ChevronLeft className="h-4 w-4 text-slate-500 cursor-pointer" />
+              <button 
+                onClick={handlePrev} 
+                className="p-1 rounded hover:bg-slate-900 text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
               <div className="flex space-x-1.5">
                 {[0, 1, 2, 3].map((idx) => (
-                  <button key={idx} className={`h-2 rounded-full ${activeStep === idx ? 'w-4 bg-blue-500' : 'w-2 bg-slate-800'}`} />
+                  <button
+                    key={idx}
+                    onClick={() => handleStepSelect(idx)}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      activeStep === idx ? 'w-4 bg-blue-500' : 'w-2 bg-slate-800'
+                    }`}
+                  />
                 ))}
               </div>
-              <ChevronRight className="h-4 w-4 text-slate-500 cursor-pointer" />
+              <button 
+                onClick={handleNext} 
+                className="p-1 rounded hover:bg-slate-950 text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Detailed India Map Container with Corridors */}
-        <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+        {/* RIGHT PANEL: LARGE DETAILED SVG MAP */}
+        <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden grid-scan">
+          {/* Legend indicator */}
+          <div className="absolute top-4 left-4 bg-slate-950/80 border border-slate-900 px-3 py-1.5 rounded text-[10px] font-mono space-y-1 z-15">
+            <div className="text-slate-400 font-bold uppercase tracking-wider mb-1">Network Legend</div>
+            <div className="flex items-center space-x-2">
+              <span className="h-2 w-2 rounded-full bg-slate-600 block"></span>
+              <span className="text-slate-500">Railway Corridor</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 block"></span>
+              <span className="text-slate-500">Major Junction</span>
+            </div>
+          </div>
+
           <svg viewBox={indiaMap.viewBox} className="w-full max-h-[440px] relative z-10">
             {/* Detailed India States Path */}
             {indiaMap.locations.map((loc) => (
@@ -88,13 +424,15 @@ export default function App() {
               />
             ))}
 
-            {/* Three Railway Corridors */}
+            {/* Only 3 Railway Corridors (as requested) */}
             <g strokeWidth="2.5" strokeLinecap="round" opacity="0.6">
               {/* Mumbai to Delhi */}
               <line x1={CITY_COORDS.mumbai.x} y1={CITY_COORDS.mumbai.y} x2={CITY_COORDS.delhi.x} y2={CITY_COORDS.delhi.y} stroke="#1E293B" />
+              
               {/* Delhi to Kolkata */}
               <line x1={CITY_COORDS.delhi.x} y1={CITY_COORDS.delhi.y} x2={CITY_COORDS.kolkata.x} y2={CITY_COORDS.kolkata.y} stroke="#1E293B" />
-              {/* Kolkata to Chennai via Bhubaneswar */}
+              
+              {/* Kolkata to Bhubaneswar to Chennai */}
               <path d={`M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}`} fill="none" stroke="#1E293B" />
             </g>
 
@@ -113,26 +451,144 @@ export default function App() {
               <text x={CITY_COORDS.kolkata.x + 8} y={CITY_COORDS.kolkata.y + 3}>{CITY_COORDS.kolkata.name}</text>
               <text x={CITY_COORDS.chennai.x + 8} y={CITY_COORDS.chennai.y + 3}>{CITY_COORDS.chennai.name}</text>
             </g>
+
+            {/* Dynamic Layer: STEP 1 */}
+            {activeStep === 0 && (
+              <g>
+                {/* Moving Train Dot #12631 along Kolkata-Bhubaneswar track */}
+                <circle cx={trainPos.x} cy={trainPos.y} r="6" fill="#FBBF24" className="glow-yellow" />
+                <text x={trainPos.x + 10} y={trainPos.y + 3} fill="#FBBF24" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  Train #12631
+                </text>
+                
+                {/* Dynamic scan ripple */}
+                <circle cx={trainPos.x} cy={trainPos.y} r="14" fill="none" stroke="#FBBF24" strokeWidth="1.5" className="pulse-marker" />
+              </g>
+            )}
+
+            {/* Dynamic Layer: STEP 2 */}
+            {activeStep === 1 && (
+              <g>
+                {/* Train has cleared the crack site */}
+                <circle cx={345} cy={425} r="5" fill="#64748B" />
+                
+                {/* RED PULSING CRACK DOT AT BHUBANESWAR */}
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="8" fill="#EF4444" className="glow-red" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="16" fill="none" stroke="#EF4444" strokeWidth="2" className="pulse-marker" />
+                
+                <text x={CITY_COORDS.bhubaneswar.x - 140} y={CITY_COORDS.bhubaneswar.y - 12} fill="#EF4444" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                  CRITICAL CRACK DETECTED
+                </text>
+              </g>
+            )}
+
+            {/* Dynamic Layer: STEP 3 */}
+            {activeStep === 2 && (
+              <g>
+                {/* Warning marker at defect */}
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="6" fill="#EF4444" className="glow-red" />
+
+                {/* Train #22846 approaching from Chennai (x=317, y=477) */}
+                <circle cx="317" cy="477" r="5" fill="#F59E0B" className="glow-yellow" />
+                <line x1="317" y1="477" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.8" />
+                <text x="200" y="490" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  Train #22846 (9.2 km)
+                </text>
+
+                {/* Train #18401 approaching from Kolkata (x=395, y=388) */}
+                <circle cx="395" cy="388" r="5" fill="#F59E0B" className="glow-yellow" />
+                <line x1="395" y1="388" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.8" />
+                <text x="407" y="392" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  Train #18401 (12.4 km)
+                </text>
+              </g>
+            )}
+
+            {/* Dynamic Layer: STEP 4 */}
+            {activeStep === 3 && (
+              <g>
+                {/* Defect is contained (turns orange) */}
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="6.5" fill="#F97316" className="glow-orange" />
+                
+                {/* Warned Train A stops (green) */}
+                <circle cx="317" cy="477" r="5" fill="#10B981" className="glow-green" />
+                <text x="200" y="490" fill="#10B981" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  Train #22846 SECURED ✓
+                </text>
+
+                {/* Warned Train B stops (green) */}
+                <circle cx="395" cy="388" r="5" fill="#10B981" className="glow-green" />
+                <text x="407" y="392" fill="#10B981" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                  Train #18401 SECURED ✓
+                </text>
+
+                {/* Repair Crew dispatched near Bhubaneswar */}
+                <g transform="translate(378, 420)" className="animate-bounce">
+                  <rect x="-4" y="-4" width="8" height="8" rx="1" fill="#3B82F6" />
+                  <text x="8" y="2" fill="#3B82F6" fontSize="7" fontFamily="monospace" fontWeight="bold">
+                    CREW B7 EN ROUTE
+                  </text>
+                </g>
+              </g>
+            )}
           </svg>
+
+          {/* Dynamic Map Status overlay text */}
+          <div className="absolute bottom-4 left-4 right-4 bg-slate-950/80 border border-slate-900 p-2.5 rounded text-center z-15 backdrop-blur-sm">
+            <span className="text-[10.5px] font-mono tracking-wider text-slate-400 block">
+              {activeStep === 0 && 'STEP 1: Locomotive Accelerometers Scan Rail Structural Vibration'}
+              {activeStep === 1 && 'STEP 2: Vibration Deviation Exceeds Threshold — Critical Crack Verified'}
+              {activeStep === 2 && 'STEP 3: Spatial Agent Analyzes Rail Schedule & Identifies Collision Risk'}
+              {activeStep === 3 && 'STEP 4: Cab Signals Slow Trains Automatically — Repair Team Deployed'}
+            </span>
+          </div>
         </div>
 
       </main>
 
-      {/* SECTION 3: IMPACT BAR */}
+      {/* SECTION 3: IMPACT BAR AT BOTTOM (3 CARDS ONLY) */}
       <footer className="bg-slate-950/90 border-t border-slate-900 px-6 py-6 z-20">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 text-center">
-            <span className="text-[10px] font-mono text-blue-400 tracking-widest uppercase">Coverage Scanned Today</span>
-            <h3 className="text-3xl font-bold font-mono text-white mt-1">87,432 km</h3>
+          
+          {/* Card 1 */}
+          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 flex flex-col items-center text-center">
+            <div className="text-[10px] font-mono text-blue-400 tracking-widest uppercase">
+              Coverage Scanned Today
+            </div>
+            <h3 className="text-3xl font-bold font-mono text-white mt-1">
+              {kmCount.toLocaleString()} <span className="text-lg text-blue-500 font-sans">km</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1.5">
+              By 13,247 trains. No new hardware.
+            </p>
           </div>
-          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 text-center">
-            <span className="text-[10px] font-mono text-red-400 tracking-widest uppercase">Anomalies Detected</span>
-            <h3 className="text-3xl font-bold font-mono text-white mt-1">14</h3>
+
+          {/* Card 2 */}
+          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 flex flex-col items-center text-center">
+            <div className="text-[10px] font-mono text-red-400 tracking-widest uppercase">
+              Track Anomalies Detected
+            </div>
+            <h3 className="text-3xl font-bold font-mono text-white mt-1">
+              {faultsCount} <span className="text-xs text-red-500 font-mono font-medium">CRITICAL</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1.5">
+              Average 1.8 seconds detection time.
+            </p>
           </div>
-          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 text-center">
-            <span className="text-[10px] font-mono text-emerald-400 tracking-widest uppercase">Warnings Dispatched</span>
-            <h3 className="text-3xl font-bold font-mono text-white mt-1">9</h3>
+
+          {/* Card 3 */}
+          <div className="bg-[#0B0F19] border border-slate-900 rounded-lg p-5 flex flex-col items-center text-center">
+            <div className="text-[10px] font-mono text-emerald-400 tracking-widest uppercase">
+              Train Cab Warnings Dispatched
+            </div>
+            <h3 className="text-3xl font-bold font-mono text-white mt-1">
+              {warnedCount} <span className="text-xs text-emerald-400 font-mono font-medium">SUCCESS</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1.5">
+              Zero new trackside sensors.
+            </p>
           </div>
+
         </div>
       </footer>
 
