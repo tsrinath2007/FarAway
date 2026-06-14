@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import { Train, ChevronLeft, ChevronRight } from 'lucide-react';
 import indiaMap from '@svg-maps/india';
 
+const CITY_COORDS = {
+  delhi: { x: 188, y: 205, name: 'DELHI' },
+  mumbai: { x: 135, y: 430, name: 'MUMBAI' },
+  kolkata: { x: 425, y: 370, name: 'KOLKATA' },
+  chennai: { x: 245, y: 585, name: 'CHENNAI' },
+  bhubaneswar: { x: 365, y: 405, name: 'BHUBANESWAR' }
+};
+
 export default function App() {
   const [activeStep, setActiveStep] = useState(0);
 
@@ -64,9 +72,10 @@ export default function App() {
           </div>
         </div>
 
-        {/* Detailed India Map Container */}
+        {/* Detailed India Map Container with Corridors */}
         <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
           <svg viewBox={indiaMap.viewBox} className="w-full max-h-[440px] relative z-10">
+            {/* Detailed India States Path */}
             {indiaMap.locations.map((loc) => (
               <path
                 key={loc.id}
@@ -78,6 +87,32 @@ export default function App() {
                 strokeWidth="0.8"
               />
             ))}
+
+            {/* Three Railway Corridors */}
+            <g strokeWidth="2.5" strokeLinecap="round" opacity="0.6">
+              {/* Mumbai to Delhi */}
+              <line x1={CITY_COORDS.mumbai.x} y1={CITY_COORDS.mumbai.y} x2={CITY_COORDS.delhi.x} y2={CITY_COORDS.delhi.y} stroke="#1E293B" />
+              {/* Delhi to Kolkata */}
+              <line x1={CITY_COORDS.delhi.x} y1={CITY_COORDS.delhi.y} x2={CITY_COORDS.kolkata.x} y2={CITY_COORDS.kolkata.y} stroke="#1E293B" />
+              {/* Kolkata to Chennai via Bhubaneswar */}
+              <path d={`M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}`} fill="none" stroke="#1E293B" />
+            </g>
+
+            {/* Major Hub Cities */}
+            <g fill="#10B981" opacity="0.8">
+              <circle cx={CITY_COORDS.delhi.x} cy={CITY_COORDS.delhi.y} r="4.5" />
+              <circle cx={CITY_COORDS.mumbai.x} cy={CITY_COORDS.mumbai.y} r="4.5" />
+              <circle cx={CITY_COORDS.kolkata.x} cy={CITY_COORDS.kolkata.y} r="4.5" />
+              <circle cx={CITY_COORDS.chennai.x} cy={CITY_COORDS.chennai.y} r="4.5" />
+            </g>
+
+            {/* City Text Labels */}
+            <g fill="#64748B" fontSize="9" fontFamily="monospace" opacity="0.8">
+              <text x={CITY_COORDS.delhi.x + 8} y={CITY_COORDS.delhi.y + 3}>{CITY_COORDS.delhi.name}</text>
+              <text x={CITY_COORDS.mumbai.x - 50} y={CITY_COORDS.mumbai.y + 3}>{CITY_COORDS.mumbai.name}</text>
+              <text x={CITY_COORDS.kolkata.x + 8} y={CITY_COORDS.kolkata.y + 3}>{CITY_COORDS.kolkata.name}</text>
+              <text x={CITY_COORDS.chennai.x + 8} y={CITY_COORDS.chennai.y + 3}>{CITY_COORDS.chennai.name}</text>
+            </g>
           </svg>
         </div>
 
