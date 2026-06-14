@@ -354,8 +354,8 @@ export default function App() {
                     <div className="mt-3 bg-slate-950/60 border border-slate-900 rounded-lg p-3">
                       <div className="flex items-center justify-between text-xs text-slate-400 mb-1 font-mono">
                         <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-sky-400" /> Live Axle Vibration</span>
-                        <span className={subProgress > 45 && subProgress < 75 ? 'text-red-400 font-bold animate-pulse' : 'text-emerald-400'}>
-                          {subProgress > 45 && subProgress < 75 ? 'ANOMALY DETECTED' : 'NOMINAL (1.2G)'}
+                        <span className={vibrations.some(v => v > 20) ? 'text-red-400 font-bold animate-pulse' : 'text-emerald-400'}>
+                          {vibrations.some(v => v > 20) ? `ANOMALY DETECTED (${(Math.max(...vibrations) / 10).toFixed(1)}G)` : `NOMINAL (${(vibrations[vibrations.length - 1] / 10).toFixed(1)}G)`}
                         </span>
                       </div>
                       
