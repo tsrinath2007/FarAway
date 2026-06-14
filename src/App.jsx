@@ -951,6 +951,22 @@ export default function App() {
           </div>
 
         </div>
+
+        {/* Team & Teammates Credits Sub-Footer */}
+        <div className="max-w-7xl mx-auto mt-6 pt-4 border-t border-slate-900/60 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+          <div>
+            <span className="font-semibold text-slate-400">Team: </span>
+            <span className="font-mono text-sky-400 font-bold">tsrinath2020</span>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-center md:text-right">
+            <span className="text-slate-400 font-semibold">Teammates:</span>
+            <span className="text-sky-300/90 font-medium">Thota Sai Eswar Srinath <span className="text-[10px] text-sky-400 font-bold font-mono px-1 bg-sky-950/40 rounded border border-sky-900/30">Team Lead</span></span>
+            <span>Bondugula Pranav Teja</span>
+            <span>Pushkar Koppeti</span>
+            <span>Nikhil Sai Kadiri</span>
+            <span>BIRUDARAJU ARYABHAT RAJU</span>
+          </div>
+        </div>
       </footer>
 
       {/* HOW IT WORKS MODAL OVERLAY */}
