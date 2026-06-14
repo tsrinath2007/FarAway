@@ -5,380 +5,173 @@ import {
   AlertTriangle, 
   Cpu, 
   CheckCircle2, 
+  ChevronLeft, 
+  ChevronRight, 
   Play, 
   Pause,
+  MapPin,
   Clock,
-  Layers,
-  RefreshCw,
-  Sliders,
-  Settings,
-  Shield,
-  FileText,
-  AlertOctagon,
-  Trash2
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  Tooltip as ChartTooltip, 
-  CartesianGrid 
-} from 'recharts';
 import indiaMap from '@svg-maps/india';
 
-// Coordinates scaled to 612x696 viewBox
-const CITY_COORDS = {
-  delhi: { x: 188, y: 205, name: 'DELHI' },
-  mumbai: { x: 135, y: 430, name: 'MUMBAI' },
-  kolkata: { x: 425, y: 370, name: 'KOLKATA' },
-  chennai: { x: 245, y: 585, name: 'CHENNAI' },
-  bhubaneswar: { x: 365, y: 405, name: 'BHUBANESWAR' }
+// Coordinates for key cities calibrated for the 612x696 @svg-maps/india viewbox
+const CITIES = {
+  delhi: { x: 188, y: 205, name: 'Delhi' },
+  mumbai: { x: 135, y: 430, name: 'Mumbai' },
+  kolkata: { x: 425, y: 370, name: 'Kolkata' },
+  chennai: { x: 245, y: 585, name: 'Chennai' },
+  bhubaneswar: { x: 365, y: 405, name: 'Bhubaneswar' }
 };
 
-// Rail Corridors path definitions
-const CORRIDORS = [
-  { id: 'mumbai-delhi', path: `M ${CITY_COORDS.mumbai.x},${CITY_COORDS.mumbai.y} L ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y}` },
-  { id: 'delhi-kolkata', path: `M ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y} L ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y}` },
-  { id: 'kolkata-chennai', path: `M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}` }
+// Secondary monitoring nodes representing nationwide track inspections
+const SECONDARY_HUBS = [
+  { name: 'Hyderabad', x: 250, y: 490 },
+  { name: 'Bengaluru', x: 215, y: 575 },
+  { name: 'Ahmedabad', x: 105, y: 365 },
+  { name: 'Jaipur', x: 155, y: 245 },
+  { name: 'Nagpur', x: 265, y: 395 },
+  { name: 'Guwahati', x: 520, y: 285 },
+  { name: 'Lucknow', x: 255, y: 228 },
+  { name: 'Patna', x: 355, y: 258 }
 ];
 
-// Secondary nodes (ambient beacons) representing nationwide track monitoring
-const SECONDARY_HUBS = [
-  { name: 'HYDERABAD', x: 250, y: 490 },
-  { name: 'BENGALURU', x: 215, y: 575 },
-  { name: 'AHMEDABAD', x: 105, y: 365 },
-  { name: 'JAIPUR', x: 155, y: 245 },
-  { name: 'NAGPUR', x: 265, y: 395 },
-  { name: 'GUWAHATI', x: 520, y: 285 },
-  { name: 'LUCKNOW', x: 255, y: 228 },
-  { name: 'PATNA', x: 355, y: 258 }
-];
+// Count-up hook for numbers
+function useCountUp(targetString, isPlaying, duration = 1500) {
+  const [value, setValue] = useState(0);
+  const target = parseInt(targetString.replace(/,/g, ''), 10);
+  
+  useEffect(() => {
+    if (!isPlaying) return;
+    let start = 0;
+    const totalTicks = 60;
+    const tickDuration = duration / totalTicks;
+    let tick = 0;
+    
+    const timer = setInterval(() => {
+      tick++;
+      const progress = tick / totalTicks;
+      const easeProgress = 1 - Math.pow(1 - progress, 2); // Ease out
+      const current = Math.floor(easeProgress * target);
+      setValue(current);
+      if (tick >= totalTicks) {
+        clearInterval(timer);
+        setValue(target);
+      }
+    }, tickDuration);
+    
+    return () => clearInterval(timer);
+  }, [targetString, isPlaying, target, duration]);
+
+  return value.toLocaleString();
+}
 
 export default function App() {
-  // UI & Network state
-  const [toasts, setToasts] = useState([]);
-  const addToast = (message, type = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  };
-
-  const [kpis, setKpis] = useState({
-    trackHealthScore: 100,
-    activeTrains: 3,
-    activeFaults: 0,
-    alertsSentToday: 0
-  });
-  const [trains, setTrains] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [faults, setFaults] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [selectedTrainId, setSelectedTrainId] = useState('12727');
-  const [isSimulating, setIsSimulating] = useState(true);
+  const [activeStep, setActiveStep] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [subProgress, setSubProgress] = useState(0); // 0 to 100 within a step
+  const [vibrations, setVibrations] = useState(Array(40).fill(12));
   const [time, setTime] = useState(new Date());
 
-  // Interactive controls
-  const [injectRoute, setInjectRoute] = useState('kolkata-chennai');
-  const [injectSegment, setInjectSegment] = useState(30);
-  const [injectSeverity, setInjectSeverity] = useState('CRITICAL');
-  const [trainFaultToggles, setTrainFaultToggles] = useState({
-    '12727': false,
-    '12805': false,
-    '12645': false
-  });
-
-  // Map state
+  // State for interactive map hovers
   const [hoveredState, setHoveredState] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [activeHub, setActiveHub] = useState(null);
-  const [mapLayers, setMapLayers] = useState({
-    grid: true,
-    corridors: true,
-    radar: true,
-    telemetry: true,
-    junctions: true,
-    secondary: true
-  });
 
-  // Vibration graph history (for Selected Train)
-  const [vibHistory, setVibHistory] = useState([]);
-  const historyCounter = useRef(0);
-
-  // 1. Live ticking clock
+  // Live ticking clock
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch all backend stats
-  const fetchAllData = async () => {
-    try {
-      console.log('Fetching system status and track section reports...');
-      const [kpiRes, trainRes, faultRes, logRes, sectionRes] = await Promise.all([
-        fetch('/api/kpis').then(r => r.json()),
-        fetch('/api/trains').then(r => r.json()),
-        fetch('/api/faults').then(r => r.json()),
-        fetch('/api/logs').then(r => r.json()),
-        fetch('/api/sections').then(r => r.json())
-      ]);
-      console.log('Telemetry fetch successful.', {
-        trackHealth: kpiRes.trackHealthScore,
-        activeFaults: faultRes.length,
-        trainsOnline: trainRes.length
-      });
-      setKpis(kpiRes);
-      setTrains(trainRes);
-      setFaults(faultRes);
-      setLogs(logRes);
-      setSections(sectionRes || []);
-    } catch (err) {
-      console.error('Error connecting to backend services:', err);
-    }
-  };
-
-  // Telemetry loop: Runs every 800ms when simulation is active
+  // Sync subProgress with 3-second step duration (30ms * 100 = 3s)
   useEffect(() => {
-    if (!isSimulating) return;
-
-    const interval = setInterval(async () => {
-      console.log('Advancing train simulation cycle...');
-      const data = await fetch('/api/trains').then(r => r.json()).catch(() => []);
-      if (!data || data.length === 0) return;
-
-      for (let train of data) {
-        // Calculate step speed-to-position modifier
-        const speedVal = train.speed || train.baseSpeed || 100;
-        const positionIncrement = (speedVal / 3600) * 0.25 * 0.15; // artificially scaled for visual dashboard feedback
-        const nextPosition = (train.position + positionIncrement) % 1.0;
-        const segmentIndex = Math.floor(nextPosition * 100);
-
-        // 2. Read sensor accelerometer vibration
-        let vibration = 0.6 + Math.random() * 0.6; // Base healthy vibration
-
-        // Check if train has manual anomaly mode turned on
-        if (trainFaultToggles[train.id]) {
-          vibration = 4.2 + Math.random() * 2.8; // Generate severe vibration peaks
-        } else {
-          // Check if train is passing over an active fault segment on its route
-          const routeFaults = faults.filter(f => f.route === train.route && f.status === 'ACTIVE');
-          routeFaults.forEach(fault => {
-            if (Math.abs(fault.segmentIndex - segmentIndex) <= 3) {
-              vibration = fault.severity === 'CRITICAL' ? 5.8 + Math.random() * 2.5 : 3.6 + Math.random() * 1.5;
-            }
-          });
-        }
-
-        // 3. Post telemetry update
-        const updatePayload = {
-          id: train.id,
-          position: nextPosition,
-          vibration,
-          speed: train.speed
-        };
-        console.log(`Sending /api/trains/update for Train ${train.id}:`, updatePayload);
-        const updateRes = await fetch('/api/trains/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatePayload)
-        }).then(r => r.json()).catch(() => null);
-        if (updateRes) {
-          console.log(`Update success for Train ${train.id}:`, updateRes);
-        }
-
-        // 4. Report sensors to consensus learning loops
-        const reportPayload = {
-          trainId: train.id,
-          route: train.route,
-          position: nextPosition,
-          vibration
-        };
-        console.log(`Sending /api/faults/report for Train ${train.id}:`, reportPayload);
-        const reportRes = await fetch('/api/faults/report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(reportPayload)
-        }).then(r => r.json()).catch(() => null);
-        if (reportRes) {
-          console.log(`Report success for Train ${train.id}:`, reportRes);
-        }
-      }
-
-      // Fetch fresh global state
-      fetchAllData();
-    }, 800);
-
+    let interval;
+    if (isAutoPlaying) {
+      interval = setInterval(() => {
+        setSubProgress((prev) => {
+          if (prev >= 100) {
+            setActiveStep((step) => (step + 1) % 4);
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 30);
+    } else {
+      setSubProgress(100);
+    }
     return () => clearInterval(interval);
-  }, [isSimulating, trainFaultToggles, faults]);
+  }, [isAutoPlaying, activeStep]);
 
-  // Update real-time vibration scrolling graph for the selected train
+  // Handle live scrolling vibration graph in Card 1
   useEffect(() => {
-    if (trains.length === 0) return;
-    const currentTrain = trains.find(t => t.id === selectedTrainId);
-    if (!currentTrain) return;
-
-    setVibHistory(prev => {
-      const next = [...prev, {
-        time: historyCounter.current++,
-        Vibration: parseFloat(currentTrain.vibration.toFixed(2))
-      }];
-      if (next.length > 25) next.shift(); // Keep last 25 ticks
-      return next;
-    });
-  }, [trains, selectedTrainId]);
-
-  // Initial Seed
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  // Trigger manual injection
-  const handleInjectFault = async (e) => {
-    e.preventDefault();
-    const payload = {
-      route: injectRoute,
-      segmentIndex: parseInt(injectSegment, 10),
-      severity: injectSeverity
-    };
-    console.log('System Control Room submitting Anomaly Injection payload:', payload);
-    try {
-      const res = await fetch('/api/inject-fault', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).then(r => r.json());
-
-      console.log('Anomaly Injector Response:', res);
-      if (res.success) {
-        addToast(`Fault injected successfully in section ${res.fault.sectionId}!`, 'success');
-        fetchAllData();
-      } else {
-        addToast(`Failed: ${res.message}`, 'error');
-      }
-    } catch (err) {
-      console.error('Network failure trying to inject fault:', err);
-      addToast('Network error during manual injection', 'error');
-    }
-  };
-
-  // Reset database
-  const handleReset = async () => {
-    console.log('Sending system-wide reset command to cloud...');
-    try {
-      const res = await fetch('/api/faults/clear-all', { method: 'POST' }).then(r => r.json());
-      console.log('System database successfully reset:', res);
-      addToast('System database reset completed.', 'info');
-      setVibHistory([]);
-      setTrainFaultToggles({
-        '12727': false,
-        '12805': false,
-        '12645': false
+    const timer = setInterval(() => {
+      setVibrations((prev) => {
+        const next = [...prev];
+        next.shift();
+        
+        let val = 10 + Math.random() * 5; // Base normal signal
+        
+        // Inject spike if on Step 1 and subProgress is between 30 and 75
+        if (activeStep === 0 && subProgress > 30 && subProgress < 75) {
+          const x = (subProgress - 30) / 45; // 0 to 1
+          const peak = Math.sin(x * Math.PI) * 38;
+          val += peak;
+        }
+        
+        next.push(val);
+        return next;
       });
-      fetchAllData();
-    } catch (err) {
-      console.error('Reset database failed:', err);
-      addToast('Reset database failed.', 'error');
-    }
+    }, 70);
+
+    return () => clearInterval(timer);
+  }, [activeStep, subProgress]);
+
+  // Jump to step manually
+  const goToStep = (stepIndex) => {
+    setIsAutoPlaying(false);
+    setActiveStep(stepIndex);
+    setSubProgress(100);
   };
 
-  // Coordinates helper for track routes
-  const getCoordinatesForRoutePos = (route, position) => {
-    if (route === 'mumbai-delhi') {
-      return {
-        x: 135 + position * (188 - 135),
-        y: 430 + position * (205 - 430)
-      };
-    }
-    if (route === 'delhi-kolkata') {
-      return {
-        x: 188 + position * (425 - 188),
-        y: 205 + position * (370 - 205)
-      };
-    }
-    if (route === 'kolkata-chennai') {
-      if (position <= 0.3) {
-        const t = position / 0.3;
-        return {
-          x: 425 + t * (365 - 425),
-          y: 370 + t * (405 - 370)
-        };
-      } else {
-        const t = (position - 0.3) / 0.7;
-        return {
-          x: 365 + t * (245 - 365),
-          y: 405 + t * (585 - 405)
-        };
-      }
-    }
-    return { x: 0, y: 0 };
+  const nextStep = () => {
+    setIsAutoPlaying(false);
+    setActiveStep((prev) => (prev + 1) % 4);
+    setSubProgress(100);
   };
 
-  // Get coordinates for specific section bounds
-  const getSectionCoordinates = (sectionId) => {
-    const num = parseInt(sectionId.replace('TRK-', ''), 10);
-    let route = '';
-    let startPos = 0;
-    let endPos = 0;
-    
-    if (num >= 501 && num <= 515) {
-      route = 'mumbai-delhi';
-      const idx = num - 501;
-      startPos = idx / 15;
-      endPos = (idx + 1) / 15;
-    } else if (num >= 516 && num <= 530) {
-      route = 'delhi-kolkata';
-      const idx = num - 516;
-      startPos = idx / 15;
-      endPos = (idx + 1) / 15;
-    } else if (num >= 531 && num <= 550) {
-      route = 'kolkata-chennai';
-      const idx = num - 531;
-      startPos = idx / 20;
-      endPos = (idx + 1) / 20;
-    }
-    
-    const startCoords = getCoordinatesForRoutePos(route, startPos);
-    const endCoords = getCoordinatesForRoutePos(route, endPos);
-    return { startCoords, endCoords, route };
+  const prevStep = () => {
+    setIsAutoPlaying(false);
+    setActiveStep((prev) => (prev - 1 + 4) % 4);
+    setSubProgress(100);
   };
 
-  // Get train path coordinates along the route
-  const getTrainScreenCoords = (train) => {
-    return getCoordinatesForRoutePos(train.route, train.position);
-  };
-
-  // Hover and Tooltip handlers for India Map
+  // Map state interactive handlers
   const handleStateMouseEnter = (loc, e) => {
-    const stateName = loc.name || '';
-    const stateId = loc.id || '';
-    const nameLength = stateName.length;
+    const name = loc.name || '';
+    const nameLength = name.length;
     
-    const sensorsOnline = 15 + (nameLength * 9) % 30;
-    const sensorsTotal = sensorsOnline + (nameLength % 4);
-    const signalPercent = 85 + (nameLength * 3) % 16;
-    const scannerStatus = nameLength % 4 === 0 ? 'CALIBRATING' : 'SCANNING - ACTIVE';
-    const trafficFlow = nameLength % 6 === 0 ? 'RESTRICTED' : 'NORMAL';
+    const sensorsOnline = 15 + (nameLength * 7) % 25;
+    const sensorsTotal = sensorsOnline + (nameLength % 3);
+    const signalPercent = 89 + (nameLength * 3) % 11;
+    const trafficFlow = nameLength % 5 === 0 ? 'RESTRICTED' : 'NORMAL';
     
     setHoveredState({
-      id: stateId,
-      name: stateName.toUpperCase(),
+      name: name.toUpperCase(),
       sensorsOnline,
       sensorsTotal,
       signalPercent,
-      scannerStatus,
       trafficFlow
     });
   };
 
   const handleStateMouseMove = (e) => {
-    const mapBounds = document.getElementById('india-map-container')?.getBoundingClientRect();
-    if (mapBounds) {
+    const container = document.getElementById('india-map-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
       setTooltipPos({
-        x: e.clientX - mapBounds.left,
-        y: e.clientY - mapBounds.top
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
       });
     }
   };
@@ -387,828 +180,740 @@ export default function App() {
     setHoveredState(null);
   };
 
-  const activeTrainDetails = trains.find(t => t.id === selectedTrainId) || {};
+  // Fixed coordinates for the detecting train (#12631) - midway between Kolkata and Bhubaneswar
+  const getStep1TrainCoords = () => {
+    return {
+      x: 395, 
+      y: 387
+    };
+  };
+
+  // Fixed coordinates for approaching trains in Step 3 - midway points
+  const getStep3Train1Coords = () => {
+    // Chennai to Bhubaneswar midway
+    return {
+      x: 305, 
+      y: 495
+    };
+  };
+
+  const getStep3Train2Coords = () => {
+    // Kolkata to Bhubaneswar midway
+    return {
+      x: 395, 
+      y: 387
+    };
+  };
+
+  // Impact stats count-up values
+  const kmMonitored = useCountUp("87,432", true);
+  const faultsDetected = useCountUp("14", true);
+  const trainsWarned = useCountUp("9", true);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans relative select-none">
+    <div className="min-h-screen bg-[#050b18] text-slate-100 flex flex-col justify-between font-sans selection:bg-sky-500/30 selection:text-white">
       
-      {/* SECTION 1: HEADER HEADER */}
-      <header className="border-b border-slate-900 bg-slate-950/90 px-6 py-4 flex flex-col md:flex-row items-center justify-between z-20 gap-4">
-        <div className="flex items-center space-x-2.5">
-          <div className="bg-sky-500 p-2 rounded flex items-center justify-center animate-pulse glow-neon-blue">
-            <Cpu className="h-5 w-5 text-slate-950 font-bold" />
+      {/* SECTION 1 - HERO HEADER */}
+      <header className="border-b border-slate-900/80 bg-[#060e22]/90 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          
+          {/* Logo with small train icon */}
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-tr from-sky-600 to-indigo-600 p-2 rounded-lg shadow-lg shadow-sky-950/40">
+              <Train className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <span className="text-lg font-black tracking-widest text-white">PULSE<span className="text-sky-400">RAIL</span></span>
+              <span className="hidden sm:inline-block text-[9px] font-mono tracking-widest text-slate-500 uppercase ml-2 border-l border-slate-800 pl-2">System Live</span>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-wider text-white font-mono flex items-center">
-              TRACKPULSE <span className="text-sky-400 ml-1">AI</span>
-            </h1>
-            <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest leading-none mt-0.5">Collaborative Rail Safety Net</p>
+
+          {/* Autoplay status and quick controls */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide border transition-all ${
+                isAutoPlaying 
+                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 shadow-[0_0_10px_rgba(14,165,233,0.1)]' 
+                  : 'bg-slate-900 text-slate-400 border-slate-800'
+              }`}
+            >
+              {isAutoPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              {isAutoPlaying ? 'AUTO PLAYING' : 'PAUSED'}
+            </button>
+
+            {/* Small top right clock */}
+            <div className="flex items-center gap-2 bg-[#091127] border border-slate-900 px-3 py-1.5 rounded-full text-slate-300">
+              <Clock className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-xs font-bold font-mono tracking-wider">
+                {time.toLocaleTimeString('en-US', { hour12: false })}
+              </span>
+            </div>
           </div>
+
         </div>
 
-        <div className="flex items-center space-x-6">
-          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded text-xs">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span className="font-semibold text-emerald-400 font-mono tracking-wider">
-              {isSimulating ? 'SIMULATION RUNNING' : 'SIMULATION PAUSED'}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded text-slate-300">
-            <Clock className="h-4 w-4 text-slate-500" />
-            <span className="text-sm font-bold font-mono tracking-wider">
-              {time.toLocaleTimeString('en-US', { hour12: false })}
-            </span>
-          </div>
+        {/* Minimal Hero Header Text */}
+        <div className="max-w-4xl mx-auto text-center py-6 px-4">
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-none">
+            Every train is a track inspector.
+          </h2>
+          <p className="mt-2 text-sm sm:text-base text-slate-400 max-w-xl mx-auto font-medium">
+            When a train detects a fault, every train behind it is warned — automatically.
+          </p>
         </div>
       </header>
 
-      {/* SECTION 2: TOP RIBBON CARD STATS */}
-      <section className="bg-slate-950/40 border-b border-slate-900 px-6 py-4 z-10">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* KPI 1 */}
-          <div className="bg-slate-950/60 border border-slate-900 rounded-lg p-3 flex flex-col justify-between shadow-inner">
-            <span className="text-[10px] font-mono text-slate-500 tracking-wider uppercase">TRACK HEALTH INDEX</span>
-            <div className="flex items-baseline space-x-1.5 mt-1.5">
-              <h3 className={`text-2xl font-bold font-mono ${kpis.trackHealthScore >= 85 ? 'text-emerald-400 text-glow' : kpis.trackHealthScore >= 60 ? 'text-amber-400' : 'text-red-400 animate-pulse'}`}>
-                {kpis.trackHealthScore}%
-              </h3>
-              <span className="text-[8px] font-mono text-slate-400">NOMINAL</span>
-            </div>
-          </div>
-          {/* KPI 2 */}
-          <div className="bg-slate-950/60 border border-slate-900 rounded-lg p-3 flex flex-col justify-between shadow-inner">
-            <span className="text-[10px] font-mono text-slate-500 tracking-wider uppercase">ACTIVE SENSOR NODES</span>
-            <div className="flex items-baseline space-x-1.5 mt-1.5">
-              <h3 className="text-2xl font-bold font-mono text-white">
-                {kpis.activeTrains} / 3
-              </h3>
-              <span className="text-[8px] font-mono text-emerald-400">ONLINE</span>
-            </div>
-          </div>
-          {/* KPI 3 */}
-          <div className="bg-slate-950/60 border border-slate-900 rounded-lg p-3 flex flex-col justify-between shadow-inner">
-            <span className="text-[10px] font-mono text-slate-500 tracking-wider uppercase">ACTIVE ANOMALIES</span>
-            <div className="flex items-baseline space-x-1.5 mt-1.5">
-              <h3 className={`text-2xl font-bold font-mono ${kpis.activeFaults > 0 ? 'text-red-400 animate-pulse' : 'text-slate-400'}`}>
-                {kpis.activeFaults}
-              </h3>
-              <span className="text-[8px] font-mono text-slate-400">UNRESOLVED</span>
-            </div>
-          </div>
-          {/* KPI 4 */}
-          <div className="bg-slate-950/60 border border-slate-900 rounded-lg p-3 flex flex-col justify-between shadow-inner">
-            <span className="text-[10px] font-mono text-slate-500 tracking-wider uppercase">CAB ALERTS DISPATCHED</span>
-            <div className="flex items-baseline space-x-1.5 mt-1.5">
-              <h3 className="text-2xl font-bold font-mono text-sky-400">
-                {kpis.alertsSentToday}
-              </h3>
-              <span className="text-[8px] font-mono text-slate-400">TODAY</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 3: CENTER LAYOUT ROW */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 flex flex-col lg:flex-row gap-4 overflow-hidden">
+      {/* SECTION 2 - THE STORY (65% screen height on large displays) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-4 flex flex-col lg:flex-row gap-8 items-stretch justify-center min-h-[500px]">
         
-        {/* LEFT COMPONENT: SIMULATION COCKPIT */}
-        <div className="w-full lg:w-80 flex flex-col gap-4 shrink-0">
+        {/* Left Column: Numbered Story Cards */}
+        <div className="w-full lg:w-[45%] flex flex-col justify-between gap-4">
           
-          {/* Simulation Toggles */}
-          <div className="bg-slate-950/70 border border-slate-900 rounded-xl p-4 flex flex-col gap-3.5">
-            <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-              <h3 className="text-xs font-bold font-mono text-white flex items-center gap-1.5">
-                <Sliders className="h-3.5 w-3.5 text-sky-400" />
-                SYSTEM CONTROLS
-              </h3>
-              <button 
-                onClick={handleReset}
-                title="Reset Database"
-                className="p-1 rounded bg-slate-900 border border-slate-800 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
+          {/* Card Navigation Progress Bars */}
+          <div className="grid grid-cols-4 gap-2.5 pb-2">
+            {[0, 1, 2, 3].map((idx) => (
+              <div 
+                key={idx}
+                onClick={() => goToStep(idx)}
+                className="h-1.5 rounded-full bg-slate-900 cursor-pointer overflow-hidden relative"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setIsSimulating(!isSimulating)}
-                className={`flex-1 py-2 px-3 rounded text-xs font-semibold font-mono flex items-center justify-center gap-1.5 cursor-pointer transition-all ${isSimulating ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}
-              >
-                {isSimulating ? (
-                  <>
-                    <Pause className="h-3.5 w-3.5" />
-                    PAUSE SIM
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-3.5 w-3.5" />
-                    RESUME SIM
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Individual Train Sensors */}
-          <div className="bg-slate-950/70 border border-slate-900 rounded-xl p-4 flex flex-col gap-3.5">
-            <h3 className="text-xs font-bold font-mono text-white flex items-center gap-1.5 border-b border-slate-900 pb-2">
-              <Train className="h-3.5 w-3.5 text-sky-400" />
-              SENSOR CONFIGURATION
-            </h3>
-            
-            <div className="space-y-4">
-              {trains.map(train => (
-                <div key={train.id} className="p-3 bg-slate-900/40 border border-slate-900 rounded-lg flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white font-mono">{train.name}</span>
-                    <span className={`text-[8px] font-mono px-1 rounded ${train.alertActive ? 'bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'}`}>
-                      {train.alertActive ? 'WARNING' : 'HEALTHY'}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-slate-500">CORRIDOR:</span>
-                    <span className="text-slate-300 uppercase">{train.route.replace('-', ' → ')}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-slate-500">SPEED LIMIT:</span>
-                    <span className="text-white font-bold">{train.speed} km/h</span>
-                  </div>
-
-                  <div className="flex justify-between items-center border-t border-slate-900 pt-2 mt-1">
-                    <span className="text-[9px] font-mono text-slate-500">ANOMALY TRIGGER:</span>
-                    <button
-                      onClick={() => setTrainFaultToggles(prev => ({ ...prev, [train.id]: !prev[train.id] }))}
-                      className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded cursor-pointer transition-all ${trainFaultToggles[train.id] ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' : 'bg-slate-950 text-slate-500 border border-slate-800'}`}
-                    >
-                      {trainFaultToggles[train.id] ? 'FAULT INJECTED' : 'NORMAL SCAN'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Manual Fault Injector */}
-          <form onSubmit={handleInjectFault} className="bg-slate-950/70 border border-slate-900 rounded-xl p-4 flex flex-col gap-3">
-            <h3 className="text-xs font-bold font-mono text-white flex items-center gap-1.5 border-b border-slate-900 pb-2">
-              <AlertOctagon className="h-3.5 w-3.5 text-red-500 animate-pulse" />
-              ANOMALY INJECTOR
-            </h3>
-            
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-mono text-slate-500">SELECT CORRIDOR</label>
-              <select 
-                value={injectRoute} 
-                onChange={(e) => setInjectRoute(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-slate-200 outline-none"
-              >
-                <option value="mumbai-delhi">Mumbai → Delhi (Corridor A)</option>
-                <option value="delhi-kolkata">Delhi → Kolkata (Corridor B)</option>
-                <option value="kolkata-chennai">Kolkata → Chennai (Corridor C)</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-mono text-slate-500">SECTOR INDEX %</label>
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="100"
-                  value={injectSegment} 
-                  onChange={(e) => setInjectSegment(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-slate-200 outline-none font-mono text-center"
+                <div 
+                  className={`h-full absolute left-0 top-0 transition-all ${
+                    activeStep === idx 
+                      ? 'bg-sky-400' 
+                      : activeStep > idx ? 'bg-sky-600/60' : 'bg-transparent'
+                  }`}
+                  style={{ 
+                    width: activeStep === idx ? `${subProgress}%` : activeStep > idx ? '100%' : '0%',
+                    transition: activeStep === idx && isAutoPlaying ? 'width 30ms linear' : 'width 200ms ease'
+                  }}
                 />
               </div>
+            ))}
+          </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-mono text-slate-500">SEVERITY</label>
-                <select 
-                  value={injectSeverity} 
-                  onChange={(e) => setInjectSeverity(e.target.value)}
-                  className="bg-slate-900 border border-slate-800 rounded p-1.5 text-xs text-slate-200 outline-none"
-                >
-                  <option value="CRITICAL">CRITICAL</option>
-                  <option value="WARNING">WARNING</option>
-                </select>
+          {/* Step Cards List */}
+          <div className="flex-1 flex flex-col justify-between gap-4">
+            
+            {/* Step 1 Card */}
+            <div 
+              onClick={() => goToStep(0)}
+              className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer relative overflow-hidden ${
+                activeStep === 0 
+                  ? 'bg-[#0f1b35] border-sky-500/50 shadow-md shadow-sky-950/20' 
+                  : 'bg-[#080f21] border-slate-900 opacity-60 hover:opacity-85'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className={`text-xs font-bold font-mono px-2 py-1 rounded ${activeStep === 0 ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-500'}`}>01</span>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Train #12631 passes over a cracked rail near Bhubaneswar
+                  </h3>
+                  
+                  {activeStep === 0 && (
+                    <div className="mt-3 bg-slate-950/60 border border-slate-900 rounded-lg p-3">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1 font-mono">
+                        <span className="flex items-center gap-1.5"><Activity className="h-3 w-3 text-sky-400" /> Live Axle Vibration</span>
+                        <span className={subProgress > 45 && subProgress < 75 ? 'text-red-400 font-bold animate-pulse' : 'text-emerald-400'}>
+                          {subProgress > 45 && subProgress < 75 ? 'ANOMALY DETECTED' : 'NOMINAL (1.2G)'}
+                        </span>
+                      </div>
+                      
+                      {/* Scrolling Graph */}
+                      <svg width="100%" height="50" className="mt-2">
+                        {vibrations.map((v, i) => {
+                          if (i === 0) return null;
+                          const x1 = (i - 1) * 8;
+                          const y1 = 50 - vibrations[i - 1];
+                          const x2 = i * 8;
+                          const y2 = 50 - vibrations[i];
+                          const isSpike = vibrations[i - 1] > 20 || vibrations[i] > 20;
+                          return (
+                            <line 
+                              key={i} 
+                              x1={`${(i - 1) * 2.5}%`} 
+                              y1={y1} 
+                              x2={`${i * 2.5}%`} 
+                              y2={y2} 
+                              stroke={isSpike ? '#f87171' : '#38bdf8'} 
+                              strokeWidth={isSpike ? 2.5 : 1.5}
+                              className={isSpike ? 'glow-red' : ''}
+                            />
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            <button 
-              type="submit"
-              className="mt-1 w-full bg-red-600/10 text-red-400 border border-red-500/30 font-mono font-bold text-xs py-2 rounded hover:bg-red-600 hover:text-white transition-all cursor-pointer"
+            {/* Step 2 Card */}
+            <div 
+              onClick={() => goToStep(1)}
+              className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer relative overflow-hidden ${
+                activeStep === 1 
+                  ? 'bg-[#1e131d] border-red-500/50 shadow-md shadow-red-950/20' 
+                  : 'bg-[#080f21] border-slate-900 opacity-60 hover:opacity-85'
+              }`}
             >
-              INJECT STRUCTURAL FRACTURE
+              <div className="flex items-start gap-4">
+                <span className={`text-xs font-bold font-mono px-2 py-1 rounded ${activeStep === 1 ? 'bg-red-500 text-slate-950' : 'bg-slate-900 text-slate-500'}`}>02</span>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Abnormal vibration detected — Rail Crack confirmed
+                  </h3>
+                  
+                  {activeStep === 1 && (
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-red-950/30 flex flex-col justify-center">
+                        <span className="text-[10px] text-slate-500 font-mono">STATUS</span>
+                        <span className="text-red-400 font-bold flex items-center gap-1.5 mt-0.5 animate-pulse">
+                          <AlertTriangle className="h-3 w-3" /> CRITICAL FAULT
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-900 flex flex-col justify-center">
+                        <span className="text-[10px] text-slate-500 font-mono">SEVERITY</span>
+                        <span className="text-white font-bold mt-0.5">HIGH IMPACT</span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-900 flex flex-col justify-center">
+                        <span className="text-[10px] text-slate-500 font-mono">LOCATION</span>
+                        <span className="text-sky-400 font-mono font-bold mt-0.5">20.3°N, 85.8°E</span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-900 flex flex-col justify-center">
+                        <span className="text-[10px] text-slate-500 font-mono">CONFIRMED BY</span>
+                        <span className="text-slate-300 font-bold mt-0.5">Automated AI Consensus</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 Card */}
+            <div 
+              onClick={() => goToStep(2)}
+              className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer relative overflow-hidden ${
+                activeStep === 2 
+                  ? 'bg-[#0e1c28] border-amber-500/50 shadow-md shadow-amber-950/20' 
+                  : 'bg-[#080f21] border-slate-900 opacity-60 hover:opacity-85'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className={`text-xs font-bold font-mono px-2 py-1 rounded ${activeStep === 2 ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-slate-500'}`}>03</span>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Autonomous agent calculates risk — 2 trains approaching within 15km
+                  </h3>
+                  
+                  {activeStep === 2 && (
+                    <div className="mt-3 bg-slate-950/60 border border-slate-900 rounded-lg p-3 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20 relative">
+                          <Cpu className="h-4.5 w-4.5 text-amber-400" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block">COLLISION MITIGATION</span>
+                          <span className="text-xs text-slate-300 font-bold">Computing safe slow-down zones</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 font-mono block">NEXT TRAIN ETA</span>
+                        <span className="text-sm font-extrabold text-amber-400 font-mono">4.2 minutes</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 Card */}
+            <div 
+              onClick={() => goToStep(3)}
+              className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer relative overflow-hidden ${
+                activeStep === 3 
+                  ? 'bg-[#0d1f1d] border-emerald-500/50 shadow-md shadow-emerald-950/20' 
+                  : 'bg-[#080f21] border-slate-900 opacity-60 hover:opacity-85'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className={`text-xs font-bold font-mono px-2 py-1 rounded ${activeStep === 3 ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-500'}`}>04</span>
+                <div className="flex-1">
+                  <h3 className="text-base font-bold text-white leading-tight">
+                    Alerts dispatched. Trains slow down. Maintenance team notified.
+                  </h3>
+                  
+                  {activeStep === 3 && (
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      <div className="flex items-center gap-2.5 py-1 px-2 bg-slate-950/50 rounded border border-slate-900">
+                        <CheckCircle2 className={`h-4 w-4 text-emerald-400 transition-opacity duration-300 ${subProgress > 20 ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`} />
+                        <span className="text-slate-300 font-medium">Train #22846 warned — slows down automatically</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 py-1 px-2 bg-slate-950/50 rounded border border-slate-900">
+                        <CheckCircle2 className={`h-4 w-4 text-emerald-400 transition-opacity duration-300 ${subProgress > 55 ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`} />
+                        <span className="text-slate-300 font-medium">Train #18401 warned — slows down automatically</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 py-1 px-2 bg-slate-950/50 rounded border border-slate-900">
+                        <CheckCircle2 className={`h-4 w-4 text-emerald-400 transition-opacity duration-300 ${subProgress > 80 ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`} />
+                        <span className="text-slate-300 font-medium">Maintenance Team B7 notified with GPS details</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Prev/Next Manual Navigation */}
+          <div className="flex justify-between items-center bg-[#070e20] border border-slate-900 p-2.5 rounded-xl">
+            <button 
+              onClick={prevStep}
+              className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
             </button>
-          </form>
+            <span className="text-xs font-mono font-bold text-slate-500">Step {activeStep + 1} of 4</span>
+            <button 
+              onClick={nextStep}
+              className="p-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
 
         </div>
 
-        {/* MIDDLE COMPONENT: ACTIVE MAP CANVAS */}
+        {/* Right Column: Holographic SVG Map of India */}
         <div 
           id="india-map-container"
-          className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]"
+          className="flex-1 bg-[#070e20]/60 border border-slate-900/90 rounded-2xl p-4 flex flex-col items-center justify-center relative overflow-hidden min-h-[500px]"
         >
+          
           {/* Cyber Corner Brackets */}
           <div className="cyber-corner cyber-corner-tl"></div>
           <div className="cyber-corner cyber-corner-tr"></div>
           <div className="cyber-corner cyber-corner-bl"></div>
           <div className="cyber-corner cyber-corner-br"></div>
 
-          {/* Compass Coord Marks on borders */}
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[7px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none">
-            LAT RANGE: 8° 4' N — 37° 6' N
+          {/* Cyber-themed background design details */}
+          <div className="absolute top-3 left-4 text-[9px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none">
+            TACTICAL MONITORING INTERFACE
           </div>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[7px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none">
-            LON RANGE: 68° 7' E — 97° 2' E
-          </div>
-
-          {/* Map Layer Controller (Interactive Toggles) */}
-          <div className="absolute top-4 right-4 bg-slate-950/95 border border-slate-900/80 p-2 rounded-lg z-25 backdrop-blur-md flex items-center gap-2.5 shadow-md">
-            <span className="text-[8px] font-bold font-mono tracking-widest text-slate-500 border-r border-slate-800 pr-2">LAYERS</span>
-            <div className="flex gap-1.5">
-              <button 
-                onClick={() => setMapLayers(prev => ({ ...prev, grid: !prev.grid }))}
-                title="Toggle Holographic Grid"
-                className={`p-1.5 rounded transition-all ${mapLayers.grid ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
-              >
-                <Layers className="h-3.5 w-3.5" />
-              </button>
-              
-              <button 
-                onClick={() => setMapLayers(prev => ({ ...prev, corridors: !prev.corridors }))}
-                title="Toggle Active Rail Tracks"
-                className={`p-1.5 rounded transition-all ${mapLayers.corridors ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
-              >
-                <Activity className="h-3.5 w-3.5" />
-              </button>
-              
-              <button 
-                onClick={() => setMapLayers(prev => ({ ...prev, radar: !prev.radar }))}
-                title="Toggle Compass Radar Sweep"
-                className={`p-1.5 rounded transition-all ${mapLayers.radar ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
-              >
-                <Clock className="h-3.5 w-3.5" />
-              </button>
-
-              <button 
-                onClick={() => setMapLayers(prev => ({ ...prev, secondary: !prev.secondary }))}
-                title="Toggle Secondary Monitoring Beacons"
-                className={`p-1.5 rounded transition-all ${mapLayers.secondary ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
-              >
-                <Cpu className="h-3.5 w-3.5" />
-              </button>
-            </div>
+          <div className="absolute bottom-3 right-4 text-[9px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none flex items-center gap-1.5">
+            <Clock className="h-3 w-3" /> STEP SYNC: {subProgress}%
           </div>
 
-          <svg viewBox={indiaMap.viewBox} className="w-full max-h-[440px] relative z-10">
-            {/* Holographic Radar Grid in SVG Defs */}
+          <svg viewBox="0 0 612 696" className="w-full h-full max-h-[500px] select-none relative z-10">
+            {/* Outline grid pattern */}
             <defs>
-              <linearGradient id="radar-sweep-grad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="rgba(14, 165, 233, 0)" />
-                <stop offset="100%" stopColor="rgba(14, 165, 233, 0.35)" />
-              </linearGradient>
-              <pattern id="radar-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(56, 189, 248, 0.035)" strokeWidth="0.8" />
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(56, 189, 248, 0.015)" strokeWidth="1" />
               </pattern>
             </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" pointerEvents="none" />
 
-            {/* Grid Overlay Rect */}
-            {mapLayers.grid && (
-              <rect width="100%" height="100%" fill="url(#radar-grid)" pointerEvents="none" />
-            )}
-
-            {/* Slow Spinning Radar Compass in Background */}
-            {mapLayers.radar && (
-              <g className="animate-slow-spin" opacity="0.12" pointerEvents="none">
-                <circle cx="306" cy="348" r="140" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="2 10" />
-                <circle cx="306" cy="348" r="145" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="1 4" />
-                <path d="M 306 198 L 306 208 M 306 488 L 306 498 M 156 348 L 166 348 M 446 348 L 456 348" stroke="rgba(56, 189, 248, 0.35)" strokeWidth="1.2" />
-              </g>
-            )}
-            {mapLayers.radar && (
-              <g className="animate-slow-spin-reverse" opacity="0.08" pointerEvents="none">
-                <circle cx="306" cy="348" r="220" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="4 20" />
-              </g>
-            )}
-
-            {/* Radar Concentric Rings */}
-            {mapLayers.grid && (
-              <g fill="none" stroke="rgba(56, 189, 248, 0.03)" strokeWidth="0.8" pointerEvents="none">
-                <circle cx="306" cy="348" r="80" />
-                <circle cx="306" cy="348" r="160" strokeDasharray="2 4" />
-                <circle cx="306" cy="348" r="240" />
-                <circle cx="306" cy="348" r="320" strokeDasharray="3 6" />
-              </g>
-            )}
-
-            {/* Radar Sweep Rotating Line */}
-            {mapLayers.radar && (
-              <line 
-                x1="306" 
-                y1="348" 
-                x2="306" 
-                y2="48" 
-                stroke="url(#radar-sweep-grad)" 
-                strokeWidth="2.5" 
-                className="radar-sweep-indicator" 
-                pointerEvents="none"
-              />
-            )}
-
-            {/* Detailed India States Path */}
-            {indiaMap.locations.map((loc) => (
-              <path
-                key={loc.id}
-                d={loc.path}
-                name={loc.name}
-                id={loc.id}
-                fill="rgba(11, 15, 25, 0.6)"
-                stroke="rgba(56, 189, 248, 0.16)"
-                strokeWidth="0.7"
-                className="transition-all duration-300 hover:fill-sky-500/10 hover:stroke-sky-400/80 cursor-pointer"
-                onMouseEnter={(e) => handleStateMouseEnter(loc, e)}
-                onMouseMove={handleStateMouseMove}
-                onMouseLeave={handleStateMouseLeave}
-              />
-            ))}
-
-            {/* Glowing Railway Corridors (Neon styling) */}
-            {mapLayers.corridors && Array.from({ length: 50 }, (_, i) => {
-              const id = `TRK-${501 + i}`;
-              const sec = sections.find(s => s.sectionId === id) || { sectionId: id, status: 'SAFE', healthScore: 100 };
-              
-              const { startCoords, endCoords } = getSectionCoordinates(id);
-              
-              let color = '#10B981'; // safe green
-              let glowClass = 'glow-neon-green';
-              let isPulsing = false;
-              
-              if (sec.status === 'CRITICAL' || sec.status === 'CONFIRMED FAULT') {
-                color = '#EF4444'; // critical red
-                glowClass = 'glow-neon-red';
-                isPulsing = true;
-              } else if (sec.status === 'WARNING') {
-                color = '#F59E0B'; // warning amber
-                glowClass = 'glow-neon-amber';
-                isPulsing = true;
-              }
-              
+            {/* Detailed States of India from @svg-maps/india */}
+            {indiaMap.locations.map((loc) => {
+              const isHovered = hoveredState && hoveredState.name === loc.name.toUpperCase();
               return (
-                <g key={id}>
-                  {/* Thick dark background line */}
-                  <line 
-                    x1={startCoords.x} 
-                    y1={startCoords.y} 
-                    x2={endCoords.x} 
-                    y2={endCoords.y} 
-                    stroke="#020617" 
-                    strokeWidth="4.5" 
-                    strokeLinecap="round" 
-                  />
-                  {/* Neon glowing line */}
-                  <line 
-                    x1={startCoords.x} 
-                    y1={startCoords.y} 
-                    x2={endCoords.x} 
-                    y2={endCoords.y} 
-                    stroke={color} 
-                    strokeWidth="3.5" 
-                    strokeOpacity="0.22" 
-                    strokeLinecap="round" 
-                    className={glowClass} 
-                  />
-                  {/* Core sharp line */}
-                  <line 
-                    x1={startCoords.x} 
-                    y1={startCoords.y} 
-                    x2={endCoords.x} 
-                    y2={endCoords.y} 
-                    stroke={color} 
-                    strokeWidth="1.2" 
-                    strokeOpacity="0.75" 
-                    strokeLinecap="round" 
-                    className={isPulsing ? 'animate-pulse' : ''}
-                  />
-                  {/* Ambient path flow indicator */}
-                  {sec.status === 'SAFE' && (
-                    <line 
-                      x1={startCoords.x} 
-                      y1={startCoords.y} 
-                      x2={endCoords.x} 
-                      y2={endCoords.y} 
-                      stroke="#FFFFFF" 
-                      strokeWidth="1.2" 
-                      strokeOpacity="0.85" 
-                      strokeLinecap="round" 
-                      className="animate-track-flow" 
-                    />
-                  )}
-                </g>
+                <path
+                  key={loc.id}
+                  d={loc.path}
+                  name={loc.name}
+                  id={loc.id}
+                  fill={isHovered ? 'rgba(14, 165, 233, 0.12)' : 'rgba(11, 15, 25, 0.55)'}
+                  stroke={isHovered ? 'rgba(14, 165, 233, 0.7)' : 'rgba(56, 189, 248, 0.14)'}
+                  strokeWidth={isHovered ? '1.5' : '0.8'}
+                  className="transition-all duration-300 cursor-pointer"
+                  onMouseEnter={(e) => handleStateMouseEnter(loc, e)}
+                  onMouseMove={handleStateMouseMove}
+                  onMouseLeave={handleStateMouseLeave}
+                />
               );
             })}
 
-            {/* Secondary Network Nodes (Ambient Beacons) */}
-            {mapLayers.secondary && SECONDARY_HUBS.map((hub) => (
-              <g key={hub.name} opacity="0.6">
-                <circle cx={hub.x} cy={hub.y} r="2.5" fill="#38BDF8" />
-                <circle cx={hub.x} cy={hub.y} r="2.5" fill="none" stroke="#38BDF8" strokeWidth="0.8">
-                  <animate attributeName="r" values="2.5;7.5;2.5" dur="2.4s" repeatCount="indefinite" />
-                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2.4s" repeatCount="indefinite" />
-                </circle>
+            {/* 3 Main Railway lines */}
+            {/* Mumbai to Delhi */}
+            <path
+              d={`M ${CITIES.mumbai.x},${CITIES.mumbai.y} L ${CITIES.delhi.x},${CITIES.delhi.y}`}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <path
+              d={`M ${CITIES.mumbai.x},${CITIES.mumbai.y} L ${CITIES.delhi.x},${CITIES.delhi.y}`}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.25)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+
+            {/* Delhi to Kolkata */}
+            <path
+              d={`M ${CITIES.delhi.x},${CITIES.delhi.y} L ${CITIES.kolkata.x},${CITIES.kolkata.y}`}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <path
+              d={`M ${CITIES.delhi.x},${CITIES.delhi.y} L ${CITIES.kolkata.x},${CITIES.kolkata.y}`}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.25)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+
+            {/* Kolkata to Chennai (passes near Bhubaneswar) */}
+            <path
+              d={`M ${CITIES.kolkata.x},${CITIES.kolkata.y} L ${CITIES.bhubaneswar.x},${CITIES.bhubaneswar.y} L ${CITIES.chennai.x},${CITIES.chennai.y}`}
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <path
+              d={`M ${CITIES.kolkata.x},${CITIES.kolkata.y} L ${CITIES.bhubaneswar.x},${CITIES.bhubaneswar.y} L ${CITIES.chennai.x},${CITIES.chennai.y}`}
+              fill="none"
+              stroke={
+                activeStep === 0 ? 'rgba(56, 189, 248, 0.5)' : 
+                activeStep === 1 ? 'rgba(239, 68, 68, 0.5)' : 
+                activeStep === 2 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.5)'
+              }
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+
+            {/* City Nodes */}
+            {Object.values(CITIES).map((city) => (
+              <g key={city.name} transform={`translate(${city.x}, ${city.y})`}>
+                <circle r="4.5" fill="#1e293b" stroke="#64748b" strokeWidth="1.5" />
+                <text 
+                  x="8" 
+                  y="4" 
+                  fill="#94a3b8" 
+                  fontSize="10" 
+                  fontWeight="bold" 
+                  fontFamily="monospace"
+                  className="pointer-events-none select-none"
+                >
+                  {city.name.toUpperCase()}
+                </text>
               </g>
             ))}
 
-            {/* Active Fault Markings on Map */}
-            {faults.filter(f => f.status === 'ACTIVE').map(fault => (
-              <g key={fault.id}>
-                {/* Outer pulsing red beacon */}
-                <circle cx={fault.coords.x} cy={fault.coords.y} r="14" fill="#EF4444" fillOpacity="0.12" />
-                <circle cx={fault.coords.x} cy={fault.coords.y} r="4.5" fill="#EF4444" className="glow-red animate-pulse" />
-                <circle cx={fault.coords.x} cy={fault.coords.y} r="4.5" fill="none" stroke="#EF4444" strokeWidth="1.5">
-                  <animate attributeName="r" values="4.5;22;4.5" dur="1.6s" repeatCount="indefinite" />
-                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="1.6s" repeatCount="indefinite" />
-                </circle>
+            {/* Secondary monitoring hubs */}
+            {SECONDARY_HUBS.map((hub) => (
+              <g key={hub.name} transform={`translate(${hub.x}, ${hub.y})`}>
+                <circle r="1.5" fill="#10B981" className="glow-neon-green" />
+              </g>
+            ))}
 
-                {/* Cyber Brackets target frame */}
-                <g stroke="#EF4444" strokeWidth="0.8">
-                  <line x1={fault.coords.x - 10} y1={fault.coords.y - 10} x2={fault.coords.x - 5} y2={fault.coords.y - 10} />
-                  <line x1={fault.coords.x - 10} y1={fault.coords.y - 10} x2={fault.coords.x - 10} y2={fault.coords.y - 5} />
-                  
-                  <line x1={fault.coords.x + 10} y1={fault.coords.y - 10} x2={fault.coords.x + 5} y2={fault.coords.y - 10} />
-                  <line x1={fault.coords.x + 10} y1={fault.coords.y - 10} x2={fault.coords.x + 10} y2={fault.coords.y - 5} />
-                  
-                  <line x1={fault.coords.x - 10} y1={fault.coords.y + 10} x2={fault.coords.x - 5} y2={fault.coords.y + 10} />
-                  <line x1={fault.coords.x - 10} y1={fault.coords.y + 10} x2={fault.coords.x - 10} y2={fault.coords.y + 5} />
-                  
-                  <line x1={fault.coords.x + 10} y1={fault.coords.y + 10} x2={fault.coords.x + 5} y2={fault.coords.y + 10} />
-                  <line x1={fault.coords.x + 10} y1={fault.coords.y + 10} x2={fault.coords.x + 10} y2={fault.coords.y + 5} />
-                </g>
+            {/* --- STEP-DRIVEN DYNAMIC LAYERS --- */}
 
-                {/* Floating Sector label */}
-                <g transform={`translate(${fault.coords.x + 14}, ${fault.coords.y - 4})`}>
-                  <rect x="-2" y="-6" width="60" height="9" rx="1" fill="#020617" stroke="#EF4444" strokeWidth="0.6" fillOpacity="0.85" />
-                  <text x="0" y="1" fill="#EF4444" fontSize="5.5" fontFamily="monospace" fontWeight="bold">
-                    {fault.sectionId || `ANOMALY {fault.segmentIndex}%`}
+            {/* Step 1: Static Train dot positioned midway */}
+            {activeStep === 0 && (
+              <g>
+                {/* Core train dot */}
+                <circle 
+                  cx={getStep1TrainCoords().x} 
+                  cy={getStep1TrainCoords().y} 
+                  r="6" 
+                  fill="#38bdf8" 
+                  className="glow-neon-blue"
+                />
+                {/* Train Label */}
+                <g transform={`translate(${getStep1TrainCoords().x - 45}, ${getStep1TrainCoords().y - 20})`}>
+                  <rect width="90" height="15" rx="3" fill="#0c152b" stroke="#38bdf8" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#38bdf8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    TRAIN #12631 (110km/h)
                   </text>
                 </g>
               </g>
-            ))}
+            )}
 
-            {/* Live Moving Trains */}
-            {mapLayers.telemetry && trains.map(train => {
-              const coords = getTrainScreenCoords(train);
-              const isSelected = train.id === selectedTrainId;
-              
-              return (
-                <g 
-                  key={train.id} 
-                  className="cursor-pointer"
-                  onClick={() => setSelectedTrainId(train.id)}
-                >
-                  {/* Aura around selected train */}
-                  {isSelected && (
-                    <circle cx={coords.x} cy={coords.y} r="18" fill="none" stroke="#38BDF8" strokeWidth="1" strokeDasharray="3 3" className="animate-spin" style={{ animationDuration: '6s' }} />
-                  )}
-
-                  {/* Pulsing signal halo */}
-                  <circle cx={coords.x} cy={coords.y} r="10" fill={train.alertActive ? '#EF4444' : '#FBBF24'} fillOpacity="0.15" />
-                  <circle cx={coords.x} cy={coords.y} r="4.5" fill={train.alertActive ? '#EF4444' : '#FBBF24'} className={train.alertActive ? 'glow-red' : 'glow-yellow'} />
-                  <circle cx={coords.x} cy={coords.y} r="4.5" fill="none" stroke={train.alertActive ? '#EF4444' : '#FBBF24'} strokeWidth="0.8">
-                    <animate attributeName="r" values="4.5;14;4.5" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2s" repeatCount="indefinite" />
-                  </circle>
-
-                  {/* Overlay text for speed */}
-                  <g transform={`translate(${coords.x + 10}, ${coords.y - 12})`}>
-                    <rect x="-4" y="-8" width="62" height="11" rx="1.5" fill="#020617" stroke={isSelected ? '#38BDF8' : '#64748B'} strokeWidth="0.8" fillOpacity="0.9" />
-                    <text x="0" y="0" fill="#FFF" fontSize="6.5" fontFamily="monospace" fontWeight="bold">
-                      {train.id} • {train.speed}K
-                    </text>
-                  </g>
+            {/* Step 2: Red Alert dot at Bhubaneswar with Train #12631 parked */}
+            {activeStep === 1 && (
+              <g>
+                {/* Train dot parked at Bhubaneswar */}
+                <circle 
+                  cx={CITIES.bhubaneswar.x} 
+                  cy={CITIES.bhubaneswar.y} 
+                  r="6" 
+                  fill="#38bdf8" 
+                  className="glow-neon-blue"
+                />
+                <g transform={`translate(${CITIES.bhubaneswar.x - 45}, ${CITIES.bhubaneswar.y - 20})`}>
+                  <rect width="90" height="15" rx="3" fill="#0c152b" stroke="#38bdf8" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#38bdf8" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    TRAIN #12631 (0km/h)
+                  </text>
                 </g>
-              );
-            })}
-
-            {/* Major Hub Junction Cities (Glowing rings) */}
-            {mapLayers.junctions && Object.values(CITY_COORDS).map((city) => (
-              <g key={city.name} className="cursor-pointer" onClick={() => setActiveHub(city)}>
-                <circle cx={city.x} cy={city.y} r="10" fill="#10B981" fillOpacity="0.12" />
-                <circle cx={city.x} cy={city.y} r="4" fill="#10B981" className="glow-green" />
-                <circle cx={city.x} cy={city.y} r="4" fill="none" stroke="#10B981" strokeWidth="0.8">
-                  <animate attributeName="r" values="4;10;4" dur="2.4s" repeatCount="indefinite" />
-                  <animate attributeName="stroke-opacity" values="0.8;0.1;0.8" dur="2.4s" repeatCount="indefinite" />
-                </circle>
-              </g>
-            ))}
-
-            {/* City Text Labels (Operations Terminal Look) */}
-            {mapLayers.junctions && (
-              <g fill="rgba(148, 163, 184, 0.75)" fontSize="8" fontFamily="monospace" fontWeight="bold" letterSpacing="0.05em">
-                <text x={CITY_COORDS.delhi.x + 8} y={CITY_COORDS.delhi.y + 3}>{CITY_COORDS.delhi.name}</text>
-                <text x={CITY_COORDS.mumbai.x - 52} y={CITY_COORDS.mumbai.y + 3}>{CITY_COORDS.mumbai.name}</text>
-                <text x={CITY_COORDS.kolkata.x + 8} y={CITY_COORDS.kolkata.y + 3}>{CITY_COORDS.kolkata.name}</text>
-                <text x={CITY_COORDS.chennai.x + 8} y={CITY_COORDS.chennai.y + 3}>{CITY_COORDS.chennai.name}</text>
               </g>
             )}
+
+            {/* Alert badge (defect marker) at Bhubaneswar for Step 2+ */}
+            {activeStep >= 1 && (
+              <g transform={`translate(${CITIES.bhubaneswar.x}, ${CITIES.bhubaneswar.y})`}>
+                {/* Core alert dot (static, no pulsing scale animation) */}
+                <circle 
+                  r="6" 
+                  fill={activeStep === 3 ? '#F97316' : '#EF4444'} 
+                  className={activeStep === 3 ? 'glow-neon-orange' : 'glow-neon-red'} 
+                />
+                {/* Warning icon overlay */}
+                {activeStep !== 3 ? (
+                  <path 
+                    d="M-3,2 L3,2 L0,-4 Z" 
+                    fill="white" 
+                    className="pointer-events-none" 
+                  />
+                ) : (
+                  <path 
+                    d="M-2,0 L-0.5,1.5 L2,-1" 
+                    fill="none" 
+                    stroke="white" 
+                    strokeWidth="1" 
+                    className="pointer-events-none" 
+                  />
+                )}
+                {/* Floating Status Banner */}
+                <g transform={`translate(-50, -28)`}>
+                  <rect 
+                    width="100" 
+                    height="16" 
+                    rx="3" 
+                    fill="#0f070b" 
+                    stroke={activeStep === 3 ? '#F97316' : '#EF4444'} 
+                    strokeWidth="1" 
+                  />
+                  <text 
+                    x="50" 
+                    y="11" 
+                    fill={activeStep === 3 ? '#F97316' : '#EF4444'} 
+                    fontSize="8" 
+                    fontWeight="extrabold" 
+                    fontFamily="sans-serif" 
+                    textAnchor="middle"
+                  >
+                    {activeStep === 3 ? 'CRACK CONTAINED' : 'CRACK CONFIRMED'}
+                  </text>
+                </g>
+              </g>
+            )}
+
+            {/* Step 3: Risk calculations & 2 approaching static yellow train dots */}
+            {activeStep === 2 && (
+              <g>
+                {/* Train 1 (Chennai-Bhubaneswar midway) */}
+                <circle 
+                  cx={getStep3Train1Coords().x} 
+                  cy={getStep3Train1Coords().y} 
+                  r="5" 
+                  fill="#F59E0B" 
+                  className="glow-neon-amber"
+                />
+                
+                {/* Train 2 (Kolkata-Bhubaneswar midway) */}
+                <circle 
+                  cx={getStep3Train2Coords().x} 
+                  cy={getStep3Train2Coords().y} 
+                  r="5" 
+                  fill="#F59E0B" 
+                  className="glow-neon-amber"
+                />
+
+                {/* Distance dotted lines to Bhubaneswar */}
+                <line 
+                  x1={getStep3Train1Coords().x} 
+                  y1={getStep3Train1Coords().y} 
+                  x2={CITIES.bhubaneswar.x} 
+                  y2={CITIES.bhubaneswar.y} 
+                  stroke="#F59E0B" 
+                  strokeWidth="1.5" 
+                  strokeDasharray="4 4" 
+                  opacity="0.6"
+                />
+                <line 
+                  x1={getStep3Train2Coords().x} 
+                  y1={getStep3Train2Coords().y} 
+                  x2={CITIES.bhubaneswar.x} 
+                  y2={CITIES.bhubaneswar.y} 
+                  stroke="#F59E0B" 
+                  strokeWidth="1.5" 
+                  strokeDasharray="4 4" 
+                  opacity="0.6"
+                />
+
+                {/* Train Labels and Distance markers */}
+                <g transform={`translate(${getStep3Train1Coords().x - 45}, ${getStep3Train1Coords().y - 22})`}>
+                  <rect width="90" height="15" rx="3" fill="#0f0d07" stroke="#F59E0B" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#F59E0B" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    #22846 | 7.5 km away
+                  </text>
+                </g>
+                <g transform={`translate(${getStep3Train2Coords().x - 45}, ${getStep3Train2Coords().y - 22})`}>
+                  <rect width="90" height="15" rx="3" fill="#0f0d07" stroke="#F59E0B" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#F59E0B" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    #18401 | 5.0 km away
+                  </text>
+                </g>
+              </g>
+            )}
+
+            {/* Step 4: Alerts Dispatched, trains slowed, green checks near trains */}
+            {activeStep === 3 && (
+              <g>
+                {/* Train 1 Safe dot */}
+                <circle 
+                  cx={getStep3Train1Coords().x} 
+                  cy={getStep3Train1Coords().y} 
+                  r="6" 
+                  fill="#10B981" 
+                  className="glow-neon-green"
+                />
+                
+                {/* Train 2 Safe dot */}
+                <circle 
+                  cx={getStep3Train2Coords().x} 
+                  cy={getStep3Train2Coords().y} 
+                  r="6" 
+                  fill="#10B981" 
+                  className="glow-neon-green"
+                />
+
+                {/* Green check symbols */}
+                <g transform={`translate(${getStep3Train1Coords().x + 10}, ${getStep3Train1Coords().y - 12})`}>
+                  <circle r="6" fill="#10B981" />
+                  <path d="M-2.5,0 L-0.5,2 L2.5,-1" fill="none" stroke="white" strokeWidth="1.2" />
+                </g>
+                <g transform={`translate(${getStep3Train2Coords().x + 10}, ${getStep3Train2Coords().y - 12})`}>
+                  <circle r="6" fill="#10B981" />
+                  <path d="M-2.5,0 L-0.5,2 L2.5,-1" fill="none" stroke="white" strokeWidth="1.2" />
+                </g>
+
+                {/* Train Status Labels */}
+                <g transform={`translate(${getStep3Train1Coords().x - 45}, ${getStep3Train1Coords().y - 25})`}>
+                  <rect width="90" height="15" rx="3" fill="#070f0a" stroke="#10B981" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#10B981" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    #22846 Warned (Safe)
+                  </text>
+                </g>
+                <g transform={`translate(${getStep3Train2Coords().x - 45}, ${getStep3Train2Coords().y - 25})`}>
+                  <rect width="90" height="15" rx="3" fill="#070f0a" stroke="#10B981" strokeWidth="0.8" />
+                  <text x="45" y="11" fill="#10B981" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+                    #18401 Warned (Safe)
+                  </text>
+                </g>
+              </g>
+            )}
+
           </svg>
 
-          {/* Floating Hover State Tooltip */}
+          {/* Interactive Floating State Tooltip Card */}
           {hoveredState && (
             <div 
-              className="absolute glass-tooltip p-3 rounded-lg z-30 pointer-events-none w-56 flex flex-col gap-1.5 text-[10px] font-mono shadow-lg"
+              className="absolute glass-tooltip p-3 rounded-lg border border-sky-500/25 pointer-events-none text-xs z-30 transition-all duration-100 flex flex-col gap-1 w-44 shadow-2xl"
               style={{ 
-                left: `${tooltipPos.x + 15}px`, 
-                top: `${tooltipPos.y + 15}px` 
+                left: `${tooltipPos.x + 12}px`, 
+                top: `${tooltipPos.y + 12}px` 
               }}
             >
-              <div className="flex justify-between items-center border-b border-sky-500/20 pb-1.5 mb-0.5">
-                <span className="font-bold text-sky-400 tracking-wider">{hoveredState.name}</span>
-                <span className="text-[8px] bg-slate-900 border border-slate-800 px-1 rounded text-slate-400">ZONE {hoveredState.id.toUpperCase()}</span>
+              <div className="flex justify-between items-center border-b border-sky-500/20 pb-1 mb-1">
+                <span className="font-extrabold text-sky-400 tracking-wider uppercase truncate max-w-[110px]">{hoveredState.name}</span>
+                <span className="text-[8px] font-mono bg-sky-500/10 text-sky-400 px-1 rounded uppercase">Sector Scan</span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">SCAN MONITOR:</span>
-                <span className="text-emerald-400 font-bold">{hoveredState.scannerStatus}</span>
+                <span className="text-emerald-400 font-bold">ACTIVE</span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">SENSORS ONLINE:</span>
-                <span className="text-white font-bold">{hoveredState.sensorsOnline} / {hoveredState.sensorsTotal}</span>
+                <span className="text-white font-mono font-bold">{hoveredState.sensorsOnline} / {hoveredState.sensorsTotal}</span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">SIGNAL GAIN:</span>
-                <span className="text-sky-400 font-bold">{hoveredState.signalPercent}%</span>
+                <span className="text-sky-300 font-mono font-bold">{hoveredState.signalPercent}%</span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">TRAFFIC FLOW:</span>
-                <span className={`font-bold ${hoveredState.trafficFlow === 'NORMAL' ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>
-                  {hoveredState.trafficFlow}
-                </span>
+                <span className={`font-bold ${hoveredState.trafficFlow === 'NORMAL' ? 'text-emerald-400' : 'text-amber-400'}`}>{hoveredState.trafficFlow}</span>
               </div>
             </div>
           )}
 
-          {/* Junction Hub Interactive Click Modal */}
-          {activeHub && (
-            <div className="absolute bottom-16 right-4 bg-slate-950/95 border border-emerald-500/40 p-3 rounded-lg z-20 w-48 text-[10px] font-mono shadow-lg shadow-black/80">
-              <div className="flex justify-between items-center border-b border-emerald-500/20 pb-1 mb-1.5 text-emerald-400 font-bold">
-                <span>[ HUB: {activeHub.name} ]</span>
-                <button onClick={() => setActiveHub(null)} className="text-slate-400 hover:text-white font-sans text-xs shrink-0 cursor-pointer">×</button>
-              </div>
-              <div className="space-y-1 text-slate-300">
-                <div className="flex justify-between">
-                  <span>TELEMETRY:</span>
-                  <span className="text-emerald-400 font-bold">ONLINE</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>DEPOT STATUS:</span>
-                  <span className="text-white">STANDBY</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>COORDINATES:</span>
-                  <span className="text-slate-400">{activeHub.y}°N, {activeHub.x}°E</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>SCAN CHANNELS:</span>
-                  <span className="text-white">12 ACTIVE</span>
-                </div>
-              </div>
+          {/* Network Legend */}
+          <div className="absolute bottom-4 left-4 bg-slate-950/85 border border-slate-900/60 p-3 rounded-xl z-20 text-[9px] flex flex-col gap-1.5 shadow-lg max-w-[150px] pointer-events-none">
+            <span className="font-bold tracking-wider text-slate-500 uppercase border-b border-slate-900 pb-1 mb-0.5">Network Legend</span>
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-1.5 rounded-full bg-sky-500/20 border border-sky-400/50"></div>
+              <span className="text-slate-300 font-semibold">Scanning Corridor</span>
             </div>
-          )}
-
-          {/* Dynamic Map Status overlay text */}
-          <div className="absolute bottom-4 left-4 right-4 bg-slate-950/80 border border-slate-900 p-2.5 rounded text-center z-15 backdrop-blur-sm">
-            <span className="text-[10px] font-mono tracking-wider text-slate-400 block uppercase">
-              {faults.filter(f => f.status === 'ACTIVE').length > 0 
-                ? '⚠️ CRITICAL ALARM: Anomalies flagged on corridors. Auto-signal restriction active.' 
-                : '🛡️ ALL CLEAR: Structural rail health verified. Consensus scan active.'}
-            </span>
-          </div>
-        </div>
-
-        {/* RIGHT COMPONENT: LIVE ALERTS AND OPERATIONS LOG */}
-        <div className="w-full lg:w-80 flex flex-col gap-4 shrink-0">
-          
-          {/* Operations Warn Banner */}
-          <div className="bg-slate-950/70 border border-slate-900 rounded-xl p-4 flex flex-col gap-3.5 flex-1 min-h-[220px]">
-            <h3 className="text-xs font-bold font-mono text-white flex items-center gap-1.5 border-b border-slate-900 pb-2">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-              SIGNAL WARNING FEED
-            </h3>
-            
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1.5 custom-scrollbar max-h-[300px]">
-              {trains.filter(t => t.alertActive).length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 py-8">
-                  <Shield className="h-8 w-8 text-slate-700 mb-2" />
-                  <p className="text-[10px] font-mono uppercase tracking-widest">No active alerts</p>
-                  <p className="text-[9px] mt-1">All trains operating at standard route velocities.</p>
-                </div>
-              ) : (
-                trains.filter(t => t.alertActive).map(train => (
-                  <div key={train.id} className="p-3 bg-red-950/20 border border-red-500/30 rounded-lg flex flex-col gap-1.5 animate-pulse">
-                    <div className="flex justify-between items-center text-[10px] font-mono">
-                      <span className="font-bold text-red-400 uppercase">[ SPEED RESTRICTION ]</span>
-                      <span className="text-slate-400">{train.id}</span>
-                    </div>
-                    <p className="text-[10px] font-mono text-slate-300 leading-tight">
-                      {train.alertMessage}
-                    </p>
-                    <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mt-1 border-t border-red-500/10 pt-1">
-                      <span>RECOMMENDED SPD:</span>
-                      <span className="text-amber-400 font-bold">30 km/h</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Activity Logs */}
-          <div className="bg-slate-950/70 border border-slate-900 rounded-xl p-4 flex flex-col gap-3.5 flex-1 min-h-[220px]">
-            <h3 className="text-xs font-bold font-mono text-white flex items-center gap-1.5 border-b border-slate-900 pb-2">
-              <FileText className="h-3.5 w-3.5 text-sky-400" />
-              CLOUD TELEMETRY AUDIT
-            </h3>
-            
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1.5 custom-scrollbar max-h-[280px]">
-              {logs.length === 0 ? (
-                <p className="text-[10px] font-mono text-slate-500 text-center py-8">Awaiting audit signals...</p>
-              ) : (
-                logs.map(log => (
-                  <div key={log.id} className="text-[9.5px] font-mono leading-tight flex flex-col gap-0.5 border-b border-slate-900/60 pb-1.5">
-                    <div className="flex justify-between text-slate-500">
-                      <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                      <span className={`uppercase font-bold text-[8px] ${log.type === 'critical' ? 'text-red-500' : log.type === 'warning' ? 'text-amber-500' : 'text-sky-500'}`}>
-                        {log.type}
-                      </span>
-                    </div>
-                    <p className="text-slate-300">{log.message}</p>
-                  </div>
-                ))
-              )}
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 glow-neon-green"></div>
+              <span className="text-slate-300 font-semibold">Junction Hub</span>
             </div>
           </div>
 
         </div>
+
       </main>
 
-      {/* SECTION 4: BOTTOM ANALYSIS TELEMETRY BAY */}
-      <footer className="bg-slate-950/90 border-t border-slate-900 px-6 py-6 z-20">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* SECTION 3 - IMPACT BAR */}
+      <footer className="border-t border-slate-900/80 bg-[#060e22]/90 backdrop-blur-md py-6 px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* Oscilloscope Vibration waves */}
-          <div className="bg-[#080c16] border border-slate-900 rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-              <span className="text-[10.5px] font-mono font-bold text-white uppercase tracking-wider">LIVE AXLE ACCELERATION (G)</span>
-              <select 
-                value={selectedTrainId}
-                onChange={(e) => setSelectedTrainId(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] text-slate-300 font-mono outline-none"
-              >
-                {trains.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.id})</option>
-                ))}
-              </select>
-            </div>
+          {/* Card 1 */}
+          <div className="bg-[#081127] border border-slate-900/60 p-4 rounded-2xl flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-t from-sky-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             
-            <div className="h-32 w-full mt-1.5">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={vibHistory} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#10192e" />
-                  <XAxis dataKey="time" hide />
-                  <YAxis domain={[0, 9]} stroke="#475569" fontSize={8} fontFamily="monospace" />
-                  <ChartTooltip 
-                    contentStyle={{ background: '#020617', border: '1px solid #1e293b', fontSize: '9px', fontFamily: 'monospace' }}
-                    labelStyle={{ color: '#64748b' }}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="Vibration" 
-                    stroke={activeTrainDetails.vibration >= 3.5 ? '#EF4444' : '#38BDF8'} 
-                    strokeWidth={1.8} 
-                    dot={false}
-                    className={activeTrainDetails.vibration >= 3.5 ? 'glow-red' : 'glow-neon-blue'}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 border-t border-slate-900 pt-2">
-              <span>CURRENT PEAK: <strong className={activeTrainDetails.vibration >= 3.5 ? 'text-red-400' : 'text-slate-300'}>{activeTrainDetails.vibration?.toFixed(2)}G</strong></span>
-              <span>NOMINAL TOLERANCE: &lt; 2.5G</span>
-            </div>
+            <span className="text-3xl font-extrabold text-white tracking-tight font-mono">
+              {kmMonitored} km
+            </span>
+            <span className="text-xs font-bold text-sky-400 uppercase tracking-widest mt-1">
+              monitored today
+            </span>
+            <span className="text-[11px] text-slate-400 mt-2 font-medium">
+              By 13,247 trains. No new hardware.
+            </span>
           </div>
 
-          {/* Segment Heatmap Grid */}
-          <div className="bg-[#080c16] border border-slate-900 rounded-xl p-4 flex flex-col gap-3">
-            <span className="text-[10.5px] font-mono font-bold text-white uppercase tracking-wider border-b border-slate-900 pb-2">SEGMENT SCANNING MESH (HEATMAP)</span>
+          {/* Card 2 */}
+          <div className="bg-[#081127] border border-slate-900/60 p-4 rounded-2xl flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-t from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             
-            <div className="flex-1 flex flex-col justify-around gap-2.5 mt-1">
-              {['mumbai-delhi', 'delhi-kolkata', 'kolkata-chennai'].map(route => {
-                const routeFaults = faults.filter(f => f.route === route && f.status === 'ACTIVE');
-                const sectionsList = 
-                  route === 'mumbai-delhi' ? Array.from({ length: 15 }, (_, i) => `TRK-${501 + i}`) :
-                  route === 'delhi-kolkata' ? Array.from({ length: 15 }, (_, i) => `TRK-${516 + i}`) :
-                  Array.from({ length: 20 }, (_, i) => `TRK-${531 + i}`);
-
-                return (
-                  <div key={route} className="flex flex-col gap-1">
-                    <div className="flex justify-between items-center text-[9px] font-mono text-slate-500">
-                      <span className="uppercase">{route.replace('-', ' → ')}</span>
-                      <span className={routeFaults.length > 0 ? 'text-red-400 font-bold' : 'text-emerald-400'}>
-                        {routeFaults.length > 0 ? `${routeFaults.length} FAULT ZONE(S)` : 'SECURED'}
-                      </span>
-                    </div>
-                    <div 
-                      className="grid gap-0.5 h-3 bg-slate-950 border border-slate-900 rounded-sm overflow-hidden"
-                      style={{ gridTemplateColumns: `repeat(${sectionsList.length}, minmax(0, 1fr))` }}
-                    >
-                      {sectionsList.map((secId) => {
-                        const sec = sections.find(s => s.sectionId === secId) || { status: 'SAFE', healthScore: 100 };
-                        
-                        let colorClass = 'bg-emerald-500/80 hover:bg-emerald-400';
-                        if (sec.status === 'CRITICAL' || sec.status === 'CONFIRMED FAULT') {
-                          colorClass = 'bg-red-500 glow-red animate-pulse';
-                        } else if (sec.status === 'WARNING') {
-                          colorClass = 'bg-amber-500 glow-orange';
-                        }
-
-                        return (
-                          <div 
-                            key={secId}
-                            className={`h-full border-r border-slate-950/20 ${colorClass}`}
-                            title={`${secId} (Health: ${sec.healthScore}%, Status: ${sec.status})`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <span className="text-3xl font-extrabold text-white tracking-tight font-mono">
+              {faultsDetected}
+            </span>
+            <span className="text-xs font-bold text-red-400 uppercase tracking-widest mt-1">
+              faults detected
+            </span>
+            <span className="text-[11px] text-slate-400 mt-2 font-medium">
+              Avg 1.8s detection time
+            </span>
           </div>
 
-          {/* Fault history Table */}
-          <div className="bg-[#080c16] border border-slate-900 rounded-xl p-4 flex flex-col gap-3">
-            <span className="text-[10.5px] font-mono font-bold text-white uppercase tracking-wider border-b border-slate-900 pb-2">ACTIVE ANOMALY REGISTRY</span>
+          {/* Card 3 */}
+          <div className="bg-[#081127] border border-slate-900/60 p-4 rounded-2xl flex flex-col items-center text-center shadow-lg relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
             
-            <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[110px] mt-1">
-              <table className="w-full text-left font-mono text-[9px]">
-                <thead>
-                  <tr className="border-b border-slate-900 text-slate-500">
-                    <th className="pb-1.5">ROUTE</th>
-                    <th className="pb-1.5 text-center">SECTION</th>
-                    <th className="pb-1.5 text-center">CONFIDENCE</th>
-                    <th className="pb-1.5 text-right">STATUS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-900 text-slate-300">
-                  {faults.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" className="text-center py-4 text-slate-500">No anomalies recorded in history.</td>
-                    </tr>
-                  ) : (
-                    faults.slice(0, 5).map(fault => (
-                      <tr key={fault.id}>
-                        <td className="py-1 uppercase">{fault.route.replace('-', ' → ')}</td>
-                        <td className="py-1 text-center font-bold text-sky-400">{fault.sectionId || 'N/A'}</td>
-                        <td className="py-1 text-center">{fault.confidence} / 5</td>
-                        <td className={`py-1 text-right font-bold ${fault.status === 'ACTIVE' ? 'text-red-400 animate-pulse' : 'text-slate-500'}`}>
-                          {fault.status}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <span className="text-3xl font-extrabold text-white tracking-tight font-mono">
+              {trainsWarned}
+            </span>
+            <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mt-1">
+              trains warned in time
+            </span>
+            <span className="text-[11px] text-slate-400 mt-2 font-medium">
+              Zero new trackside sensors
+            </span>
           </div>
 
         </div>
       </footer>
-
-      {/* Toast notifications */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-        {toasts.map(toast => (
-          <div 
-            key={toast.id} 
-            className={`pointer-events-auto px-4 py-2.5 rounded-lg border text-sm font-mono flex items-center gap-2 shadow-lg animate-fade-in ${
-              toast.type === 'success' 
-                ? 'bg-emerald-950/90 text-emerald-400 border-emerald-500/30' 
-                : toast.type === 'error'
-                ? 'bg-red-950/90 text-red-400 border-red-500/30'
-                : 'bg-slate-900/90 text-slate-300 border-slate-700/30'
-            }`}
-          >
-            <span>{toast.message}</span>
-          </div>
-        ))}
-      </div>
 
     </div>
   );
