@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   Play, 
   Pause,
-  Clock
+  Clock,
+  Layers
 } from 'lucide-react';
 import indiaMap from '@svg-maps/india';
 
@@ -21,6 +22,25 @@ const CITY_COORDS = {
   chennai: { x: 245, y: 585, name: 'CHENNAI' },
   bhubaneswar: { x: 365, y: 405, name: 'BHUBANESWAR' }
 };
+
+// Rail Corridors path definitions
+const CORRIDORS = [
+  { id: 'mumbai-delhi', path: `M ${CITY_COORDS.mumbai.x},${CITY_COORDS.mumbai.y} L ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y}` },
+  { id: 'delhi-kolkata', path: `M ${CITY_COORDS.delhi.x},${CITY_COORDS.delhi.y} L ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y}` },
+  { id: 'kolkata-chennai', path: `M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}` }
+];
+
+// Secondary nodes (ambient beacons) representing nationwide track monitoring
+const SECONDARY_HUBS = [
+  { name: 'HYDERABAD', x: 250, y: 490 },
+  { name: 'BENGALURU', x: 215, y: 575 },
+  { name: 'AHMEDABAD', x: 105, y: 365 },
+  { name: 'JAIPUR', x: 155, y: 245 },
+  { name: 'NAGPUR', x: 265, y: 395 },
+  { name: 'GUWAHATI', x: 520, y: 285 },
+  { name: 'LUCKNOW', x: 255, y: 228 },
+  { name: 'PATNA', x: 355, y: 258 }
+];
 
 // Simplified Count-Up Hook for Stats
 function useCountUp(target, duration = 1500) {
@@ -56,6 +76,19 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [time, setTime] = useState(new Date());
+
+  // Overhauled Map Interactions States
+  const [hoveredState, setHoveredState] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [activeHub, setActiveHub] = useState(null);
+  const [mapLayers, setMapLayers] = useState({
+    grid: true,
+    corridors: true,
+    radar: true,
+    telemetry: true,
+    junctions: true,
+    secondary: true
+  });
 
   // 1. Live Ticking Clock (updates every second)
   useEffect(() => {
@@ -116,6 +149,44 @@ export default function App() {
   const handleNext = () => {
     setActiveStep((prev) => (prev + 1) % 4);
     setProgress(0);
+  };
+
+  // Hover and tooltip handlers for the India Map UI
+  const handleStateMouseEnter = (loc, e) => {
+    const stateName = loc.name || '';
+    const stateId = loc.id || '';
+    const nameLength = stateName.length;
+    
+    // Generate realistic, consistent telemetry scanning values deterministically
+    const sensorsOnline = 12 + (nameLength * 7) % 20;
+    const sensorsTotal = sensorsOnline + (nameLength % 3);
+    const signalPercent = 88 + (nameLength * 2) % 13;
+    const scannerStatus = nameLength % 3 === 0 ? 'CALIBRATING' : 'SCANNING - ACTIVE';
+    const trafficFlow = nameLength % 5 === 0 ? 'SLOWED' : 'NORMAL';
+    
+    setHoveredState({
+      id: stateId,
+      name: stateName.toUpperCase(),
+      sensorsOnline,
+      sensorsTotal,
+      signalPercent,
+      scannerStatus,
+      trafficFlow
+    });
+  };
+
+  const handleStateMouseMove = (e) => {
+    const mapBounds = document.getElementById('india-map-container')?.getBoundingClientRect();
+    if (mapBounds) {
+      setTooltipPos({
+        x: e.clientX - mapBounds.left,
+        y: e.clientY - mapBounds.top
+      });
+    }
+  };
+
+  const handleStateMouseLeave = () => {
+    setHoveredState(null);
   };
 
   // Animate numbers for the bottom metrics cards
@@ -387,7 +458,7 @@ export default function App() {
               </div>
               <button 
                 onClick={handleNext} 
-                className="p-1 rounded hover:bg-slate-950 text-slate-400 hover:text-white transition-colors"
+                className="p-1 rounded hover:bg-slate-905 text-slate-400 hover:text-white transition-colors"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -395,22 +466,137 @@ export default function App() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: LARGE DETAILED SVG MAP */}
-        <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden grid-scan">
+        {/* RIGHT PANEL: LARGE DETAILED SVG MAP (OVERHAULED UI) */}
+        <div 
+          id="india-map-container"
+          className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden grid-scan min-h-[500px]"
+        >
+          {/* Cyber Corner Brackets */}
+          <div className="cyber-corner cyber-corner-tl"></div>
+          <div className="cyber-corner cyber-corner-tr"></div>
+          <div className="cyber-corner cyber-corner-bl"></div>
+          <div className="cyber-corner cyber-corner-br"></div>
+
+          {/* Compass Coord Marks on borders */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[7px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none">
+            LAT RANGE: 8° 4' N — 37° 6' N
+          </div>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[7px] font-mono text-slate-600 tracking-[0.2em] pointer-events-none select-none">
+            LON RANGE: 68° 7' E — 97° 2' E
+          </div>
+          
           {/* Legend indicator */}
-          <div className="absolute top-4 left-4 bg-slate-950/80 border border-slate-900 px-3 py-1.5 rounded text-[10px] font-mono space-y-1 z-15">
-            <div className="text-slate-400 font-bold uppercase tracking-wider mb-1">Network Legend</div>
+          <div className="absolute bottom-4 left-4 bg-slate-950/95 border border-slate-900/80 px-3 py-2 rounded-lg text-[9px] font-mono space-y-1.5 z-20 backdrop-blur-sm shadow-md">
+            <div className="text-slate-500 font-bold uppercase tracking-widest text-[8px] border-b border-slate-900 pb-1 mb-1">Network Legend</div>
             <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-slate-600 block"></span>
-              <span className="text-slate-500">Railway Corridor</span>
+              <span className="h-1.5 w-6 bg-sky-500/20 border border-sky-400/50 block rounded-full"></span>
+              <span className="text-slate-300">Scanning Corridor</span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 block"></span>
-              <span className="text-slate-500">Major Junction</span>
+              <span className="h-2 w-2 rounded-full bg-emerald-500 block glow-green"></span>
+              <span className="text-slate-300">Junction Hub</span>
+            </div>
+            {activeStep > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="h-2 w-2 rounded-full bg-red-500 block glow-red animate-pulse"></span>
+                <span className="text-red-400 font-bold">Anomaly Warning</span>
+              </div>
+            )}
+          </div>
+
+          {/* Map Layer Controller (Interactive Toggles) */}
+          <div className="absolute top-4 right-4 bg-slate-950/95 border border-slate-900/80 p-2 rounded-lg z-25 backdrop-blur-md flex items-center gap-2.5 shadow-md">
+            <span className="text-[8px] font-bold font-mono tracking-widest text-slate-500 border-r border-slate-800 pr-2">LAYERS</span>
+            <div className="flex gap-1.5">
+              <button 
+                onClick={() => setMapLayers(prev => ({ ...prev, grid: !prev.grid }))}
+                title="Toggle Holographic Grid"
+                className={`p-1.5 rounded transition-all ${mapLayers.grid ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+              </button>
+              
+              <button 
+                onClick={() => setMapLayers(prev => ({ ...prev, corridors: !prev.corridors }))}
+                title="Toggle Active Rail Tracks"
+                className={`p-1.5 rounded transition-all ${mapLayers.corridors ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
+              >
+                <Activity className="h-3.5 w-3.5" />
+              </button>
+              
+              <button 
+                onClick={() => setMapLayers(prev => ({ ...prev, radar: !prev.radar }))}
+                title="Toggle Compass Radar Sweep"
+                className={`p-1.5 rounded transition-all ${mapLayers.radar ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
+              >
+                <Clock className="h-3.5 w-3.5" />
+              </button>
+
+              <button 
+                onClick={() => setMapLayers(prev => ({ ...prev, secondary: !prev.secondary }))}
+                title="Toggle Secondary Monitoring Beacons"
+                className={`p-1.5 rounded transition-all ${mapLayers.secondary ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30' : 'bg-slate-900/60 border border-slate-800/80 text-slate-500 hover:text-slate-400'}`}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
 
           <svg viewBox={indiaMap.viewBox} className="w-full max-h-[440px] relative z-10">
+            {/* Holographic Radar Grid in SVG Defs */}
+            <defs>
+              <linearGradient id="radar-sweep-grad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="rgba(14, 165, 233, 0)" />
+                <stop offset="100%" stopColor="rgba(14, 165, 233, 0.35)" />
+              </linearGradient>
+              <pattern id="radar-grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(56, 189, 248, 0.035)" strokeWidth="0.8" />
+              </pattern>
+            </defs>
+
+            {/* Grid Overlay Rect */}
+            {mapLayers.grid && (
+              <rect width="100%" height="100%" fill="url(#radar-grid)" pointerEvents="none" />
+            )}
+
+            {/* Slow Spinning Radar Compass in Background */}
+            {mapLayers.radar && (
+              <g className="animate-slow-spin" opacity="0.12" pointerEvents="none">
+                <circle cx="306" cy="348" r="140" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="2 10" />
+                <circle cx="306" cy="348" r="145" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="1 4" />
+                <path d="M 306 198 L 306 208 M 306 488 L 306 498 M 156 348 L 166 348 M 446 348 L 456 348" stroke="rgba(56, 189, 248, 0.35)" strokeWidth="1.2" />
+              </g>
+            )}
+            {mapLayers.radar && (
+              <g className="animate-slow-spin-reverse" opacity="0.08" pointerEvents="none">
+                <circle cx="306" cy="348" r="220" fill="none" stroke="rgba(56, 189, 248, 0.2)" strokeWidth="0.8" strokeDasharray="4 20" />
+              </g>
+            )}
+
+            {/* Radar Concentric Rings */}
+            {mapLayers.grid && (
+              <g fill="none" stroke="rgba(56, 189, 248, 0.03)" strokeWidth="0.8" pointerEvents="none">
+                <circle cx="306" cy="348" r="80" />
+                <circle cx="306" cy="348" r="160" strokeDasharray="2 4" />
+                <circle cx="306" cy="348" r="240" />
+                <circle cx="306" cy="348" r="320" strokeDasharray="3 6" />
+              </g>
+            )}
+
+            {/* Radar Sweep Rotating Line */}
+            {mapLayers.radar && (
+              <line 
+                x1="306" 
+                y1="348" 
+                x2="306" 
+                y2="48" 
+                stroke="url(#radar-sweep-grad)" 
+                strokeWidth="2.5" 
+                className="radar-sweep-indicator" 
+                pointerEvents="none"
+              />
+            )}
+
             {/* Detailed India States Path */}
             {indiaMap.locations.map((loc) => (
               <path
@@ -418,124 +604,392 @@ export default function App() {
                 d={loc.path}
                 name={loc.name}
                 id={loc.id}
-                fill="#060913"
-                stroke="#151E2E"
-                strokeWidth="0.8"
+                fill="rgba(11, 15, 25, 0.6)"
+                stroke="rgba(56, 189, 248, 0.16)"
+                strokeWidth="0.7"
+                className="transition-all duration-300 hover:fill-sky-500/10 hover:stroke-sky-400/80 cursor-pointer"
+                onMouseEnter={(e) => handleStateMouseEnter(loc, e)}
+                onMouseMove={handleStateMouseMove}
+                onMouseLeave={handleStateMouseLeave}
               />
             ))}
 
-            {/* Only 3 Railway Corridors (as requested) */}
-            <g strokeWidth="2.5" strokeLinecap="round" opacity="0.6">
-              {/* Mumbai to Delhi */}
-              <line x1={CITY_COORDS.mumbai.x} y1={CITY_COORDS.mumbai.y} x2={CITY_COORDS.delhi.x} y2={CITY_COORDS.delhi.y} stroke="#1E293B" />
-              
-              {/* Delhi to Kolkata */}
-              <line x1={CITY_COORDS.delhi.x} y1={CITY_COORDS.delhi.y} x2={CITY_COORDS.kolkata.x} y2={CITY_COORDS.kolkata.y} stroke="#1E293B" />
-              
-              {/* Kolkata to Bhubaneswar to Chennai */}
-              <path d={`M ${CITY_COORDS.kolkata.x},${CITY_COORDS.kolkata.y} L ${CITY_COORDS.bhubaneswar.x},${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.chennai.x},${CITY_COORDS.chennai.y}`} fill="none" stroke="#1E293B" />
-            </g>
+            {/* Glowing Railway Corridors (Neon styling) */}
+            {mapLayers.corridors && (
+              <g strokeLinecap="round">
+                {CORRIDORS.map((corridor) => (
+                  <g key={corridor.id}>
+                    {/* Track base backing */}
+                    <path d={corridor.path} fill="none" stroke="#020617" strokeWidth="4.5" />
+                    {/* Track neon outer glow */}
+                    <path d={corridor.path} fill="none" stroke="#0EA5E9" strokeWidth="3" strokeOpacity="0.22" className="glow-neon-blue" />
+                    {/* Track active center line */}
+                    <path d={corridor.path} fill="none" stroke="#38BDF8" strokeWidth="1.2" strokeOpacity="0.75" />
+                    {/* Active flowing train signal dashes */}
+                    <path d={corridor.path} fill="none" stroke="#FFFFFF" strokeWidth="1.2" strokeOpacity="0.85" className="animate-track-flow" />
+                  </g>
+                ))}
+              </g>
+            )}
 
-            {/* Major Hub Cities */}
-            <g fill="#10B981" opacity="0.8">
-              <circle cx={CITY_COORDS.delhi.x} cy={CITY_COORDS.delhi.y} r="4.5" />
-              <circle cx={CITY_COORDS.mumbai.x} cy={CITY_COORDS.mumbai.y} r="4.5" />
-              <circle cx={CITY_COORDS.kolkata.x} cy={CITY_COORDS.kolkata.y} r="4.5" />
-              <circle cx={CITY_COORDS.chennai.x} cy={CITY_COORDS.chennai.y} r="4.5" />
-            </g>
+            {/* Secondary Network Nodes (Ambient Beacons) */}
+            {mapLayers.secondary && SECONDARY_HUBS.map((hub) => (
+              <g key={hub.name} opacity="0.6">
+                <circle cx={hub.x} cy={hub.y} r="2.5" fill="#38BDF8" />
+                <circle cx={hub.x} cy={hub.y} r="5" fill="none" stroke="#38BDF8" strokeWidth="0.8" className="beacon-pulse-ring" />
+              </g>
+            ))}
 
-            {/* City Text Labels */}
-            <g fill="#64748B" fontSize="9" fontFamily="monospace" opacity="0.8">
-              <text x={CITY_COORDS.delhi.x + 8} y={CITY_COORDS.delhi.y + 3}>{CITY_COORDS.delhi.name}</text>
-              <text x={CITY_COORDS.mumbai.x - 50} y={CITY_COORDS.mumbai.y + 3}>{CITY_COORDS.mumbai.name}</text>
-              <text x={CITY_COORDS.kolkata.x + 8} y={CITY_COORDS.kolkata.y + 3}>{CITY_COORDS.kolkata.name}</text>
-              <text x={CITY_COORDS.chennai.x + 8} y={CITY_COORDS.chennai.y + 3}>{CITY_COORDS.chennai.name}</text>
-            </g>
+            {/* Major Hub Junction Cities (Glowing rings) */}
+            {mapLayers.junctions && Object.values(CITY_COORDS).map((city) => {
+              if (city.name === 'BHUBANESWAR') return null; // handled dynamically in step overlays
+              return (
+                <g key={city.name} className="cursor-pointer" onClick={() => setActiveHub(city)}>
+                  {/* Outer glow aura */}
+                  <circle cx={city.x} cy={city.y} r="10" fill="#10B981" fillOpacity="0.12" />
+                  {/* Inner green core */}
+                  <circle cx={city.x} cy={city.y} r="4" fill="#10B981" className="glow-green" />
+                  {/* Pulse ring */}
+                  <circle cx={city.x} cy={city.y} r="8" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                </g>
+              );
+            })}
+
+            {/* City Text Labels (Operations Terminal Look) */}
+            {mapLayers.junctions && (
+              <g fill="rgba(148, 163, 184, 0.75)" fontSize="8" fontFamily="monospace" fontWeight="bold" letterSpacing="0.05em">
+                <text x={CITY_COORDS.delhi.x + 8} y={CITY_COORDS.delhi.y + 3}>{CITY_COORDS.delhi.name}</text>
+                <text x={CITY_COORDS.mumbai.x - 52} y={CITY_COORDS.mumbai.y + 3}>{CITY_COORDS.mumbai.name}</text>
+                <text x={CITY_COORDS.kolkata.x + 8} y={CITY_COORDS.kolkata.y + 3}>{CITY_COORDS.kolkata.name}</text>
+                <text x={CITY_COORDS.chennai.x + 8} y={CITY_COORDS.chennai.y + 3}>{CITY_COORDS.chennai.name}</text>
+              </g>
+            )}
 
             {/* Dynamic Layer: STEP 1 */}
-            {activeStep === 0 && (
+            {activeStep === 0 && mapLayers.telemetry && (
               <g>
                 {/* Moving Train Dot #12631 along Kolkata-Bhubaneswar track */}
-                <circle cx={trainPos.x} cy={trainPos.y} r="6" fill="#FBBF24" className="glow-yellow" />
-                <text x={trainPos.x + 10} y={trainPos.y + 3} fill="#FBBF24" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                  Train #12631
-                </text>
+                <circle cx={trainPos.x} cy={trainPos.y} r="12" fill="#FBBF24" fillOpacity="0.15" />
+                <circle cx={trainPos.x} cy={trainPos.y} r="4.5" fill="#FBBF24" className="glow-yellow" />
                 
-                {/* Dynamic scan ripple */}
-                <circle cx={trainPos.x} cy={trainPos.y} r="14" fill="none" stroke="#FBBF24" strokeWidth="1.5" className="pulse-marker" />
+                {/* Dynamic scan sweep ripple */}
+                <circle cx={trainPos.x} cy={trainPos.y} r="18" fill="none" stroke="#FBBF24" strokeWidth="1" className="pulse-marker" />
+                
+                {/* Telemetry Pointer Leader Line */}
+                <path 
+                  d={`M ${trainPos.x} ${trainPos.y} L ${trainPos.x + 35} ${trainPos.y - 45} H ${trainPos.x + 90}`} 
+                  fill="none" 
+                  stroke="rgba(251, 191, 36, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                
+                {/* HUD Telemetry card */}
+                <foreignObject 
+                  x={trainPos.x + 40} 
+                  y={trainPos.y - 95} 
+                  width="110" 
+                  height="50"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-amber-500/40 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md">
+                    <div className="font-bold text-amber-400 border-b border-amber-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>LOCO #12631</span>
+                      <span className="animate-pulse">● LIVE</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>SPD:</span> <span>110 KM/H</span></div>
+                    <div className="text-white flex justify-between"><span>VIB:</span> <span>0.12G (OK)</span></div>
+                    <div className="text-white flex justify-between"><span>TEMP:</span> <span>34.2°C</span></div>
+                  </div>
+                </foreignObject>
               </g>
             )}
 
             {/* Dynamic Layer: STEP 2 */}
-            {activeStep === 1 && (
+            {activeStep === 1 && mapLayers.telemetry && (
               <g>
                 {/* Train has cleared the crack site */}
-                <circle cx={345} cy={425} r="5" fill="#64748B" />
+                <circle cx={345} cy={425} r="3" fill="rgba(148, 163, 184, 0.4)" />
                 
                 {/* RED PULSING CRACK DOT AT BHUBANESWAR */}
-                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="8" fill="#EF4444" className="glow-red" />
-                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="16" fill="none" stroke="#EF4444" strokeWidth="2" className="pulse-marker" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="14" fill="#EF4444" fillOpacity="0.15" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="5" fill="#EF4444" className="glow-red" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="22" fill="none" stroke="#EF4444" strokeWidth="1.5" className="pulse-marker" />
                 
-                <text x={CITY_COORDS.bhubaneswar.x - 140} y={CITY_COORDS.bhubaneswar.y - 12} fill="#EF4444" fontSize="9" fontFamily="monospace" fontWeight="bold">
-                  CRITICAL CRACK DETECTED
-                </text>
+                {/* Target Reticle Crosshair */}
+                <g stroke="#EF4444" strokeWidth="1">
+                  <line x1={CITY_COORDS.bhubaneswar.x - 12} y1={CITY_COORDS.bhubaneswar.y} x2={CITY_COORDS.bhubaneswar.x - 8} y2={CITY_COORDS.bhubaneswar.y} />
+                  <line x1={CITY_COORDS.bhubaneswar.x + 8} y1={CITY_COORDS.bhubaneswar.y} x2={CITY_COORDS.bhubaneswar.x + 12} y2={CITY_COORDS.bhubaneswar.y} />
+                  <line x1={CITY_COORDS.bhubaneswar.x} y1={CITY_COORDS.bhubaneswar.y - 12} x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y - 8} />
+                  <line x1={CITY_COORDS.bhubaneswar.x} y1={CITY_COORDS.bhubaneswar.y + 8} x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y + 12} />
+                </g>
+                
+                {/* Telemetry Pointer Leader Line */}
+                <path 
+                  d={`M ${CITY_COORDS.bhubaneswar.x} ${CITY_COORDS.bhubaneswar.y} L ${CITY_COORDS.bhubaneswar.x - 45} ${CITY_COORDS.bhubaneswar.y - 45} H ${CITY_COORDS.bhubaneswar.x - 105}`} 
+                  fill="none" 
+                  stroke="rgba(239, 68, 68, 0.7)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                
+                {/* HUD Telemetry Card */}
+                <foreignObject 
+                  x={CITY_COORDS.bhubaneswar.x - 145} 
+                  y={CITY_COORDS.bhubaneswar.y - 100} 
+                  width="115" 
+                  height="55"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-red-500/50 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md shadow-red-950/30">
+                    <div className="font-bold text-red-500 border-b border-red-500/20 pb-0.5 mb-1 flex justify-between animate-pulse">
+                      <span>▲ CRACK DETECTED</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>VIB G-FORCE:</span> <span className="text-red-400 font-bold">4.82G</span></div>
+                    <div className="text-white flex justify-between"><span>DEFLECT:</span> <span className="text-red-400 font-bold">+12.8mm</span></div>
+                    <div className="text-white flex justify-between"><span>SEVERITY:</span> <span className="text-red-400 font-bold">CRITICAL</span></div>
+                  </div>
+                </foreignObject>
               </g>
             )}
 
             {/* Dynamic Layer: STEP 3 */}
-            {activeStep === 2 && (
+            {activeStep === 2 && mapLayers.telemetry && (
               <g>
                 {/* Warning marker at defect */}
-                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="6" fill="#EF4444" className="glow-red" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="5" fill="#EF4444" className="glow-red" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="10" fill="none" stroke="#EF4444" strokeWidth="0.8" strokeDasharray="2 2" />
 
                 {/* Train #22846 approaching from Chennai (x=317, y=477) */}
-                <circle cx="317" cy="477" r="5" fill="#F59E0B" className="glow-yellow" />
-                <line x1="317" y1="477" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.8" />
-                <text x="200" y="490" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                  Train #22846 (9.2 km)
-                </text>
+                <circle cx="317" cy="477" r="12" fill="#F59E0B" fillOpacity="0.15" />
+                <circle cx="317" cy="477" r="4.5" fill="#F59E0B" className="glow-yellow" />
+                <circle cx="317" cy="477" r="18" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="pulse-marker" />
+                <line x1="317" y1="477" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#EF4444" strokeWidth="1.2" strokeDasharray="3 3" strokeOpacity="0.7" />
+                
+                {/* Train 1 Telemetry Pointer Line */}
+                <path 
+                  d="M 317 477 L 277 477 L 277 437 H 217" 
+                  fill="none" 
+                  stroke="rgba(245, 158, 11, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                <foreignObject 
+                  x="155" 
+                  y="387" 
+                  width="110" 
+                  height="50"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-amber-500/40 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md">
+                    <div className="font-bold text-amber-400 border-b border-amber-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>TRAIN #22846</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>DISTANCE:</span> <span>9.2 km</span></div>
+                    <div className="text-white flex justify-between"><span>SPD:</span> <span>95 KM/H</span></div>
+                    <div className="text-red-400 font-bold flex justify-between"><span>ETA IMPACT:</span> <span>3M 45S</span></div>
+                  </div>
+                </foreignObject>
 
                 {/* Train #18401 approaching from Kolkata (x=395, y=388) */}
-                <circle cx="395" cy="388" r="5" fill="#F59E0B" className="glow-yellow" />
-                <line x1="395" y1="388" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#F59E0B" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.8" />
-                <text x="407" y="392" fill="#F59E0B" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                  Train #18401 (12.4 km)
-                </text>
+                <circle cx="395" cy="388" r="12" fill="#F59E0B" fillOpacity="0.15" />
+                <circle cx="395" cy="388" r="4.5" fill="#F59E0B" className="glow-yellow" />
+                <circle cx="395" cy="388" r="18" fill="none" stroke="#F59E0B" strokeWidth="0.8" className="pulse-marker" />
+                <line x1="395" y1="388" x2={CITY_COORDS.bhubaneswar.x} y2={CITY_COORDS.bhubaneswar.y} stroke="#EF4444" strokeWidth="1.2" strokeDasharray="3 3" strokeOpacity="0.7" />
+                
+                {/* Train 2 Telemetry Pointer Line */}
+                <path 
+                  d="M 395 388 L 435 388 L 435 348 H 485" 
+                  fill="none" 
+                  stroke="rgba(245, 158, 11, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                <foreignObject 
+                  x="490" 
+                  y="303" 
+                  width="110" 
+                  height="50"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-amber-500/40 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md">
+                    <div className="font-bold text-amber-400 border-b border-amber-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>TRAIN #18401</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>DISTANCE:</span> <span>12.4 km</span></div>
+                    <div className="text-white flex justify-between"><span>SPD:</span> <span>105 KM/H</span></div>
+                    <div className="text-red-400 font-bold flex justify-between"><span>ETA IMPACT:</span> <span>5M 12S</span></div>
+                  </div>
+                </foreignObject>
               </g>
             )}
 
             {/* Dynamic Layer: STEP 4 */}
-            {activeStep === 3 && (
+            {activeStep === 3 && mapLayers.telemetry && (
               <g>
                 {/* Defect is contained (turns orange) */}
-                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="6.5" fill="#F97316" className="glow-orange" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="6" fill="#F97316" className="glow-orange" />
+                <circle cx={CITY_COORDS.bhubaneswar.x} cy={CITY_COORDS.bhubaneswar.y} r="12" fill="none" stroke="#F97316" strokeWidth="0.8" strokeDasharray="3 3" />
                 
-                {/* Warned Train A stops (green) */}
-                <circle cx="317" cy="477" r="5" fill="#10B981" className="glow-green" />
-                <text x="200" y="490" fill="#10B981" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                  Train #22846 SECURED ✓
-                </text>
+                {/* Warned Train A stops (green check) */}
+                <circle cx="317" cy="477" r="12" fill="#10B981" fillOpacity="0.15" />
+                <circle cx="317" cy="477" r="4.5" fill="#10B981" className="glow-green" />
+                <circle cx="317" cy="477" r="18" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                
+                <path 
+                  d="M 317 477 L 277 477 L 277 437 H 217" 
+                  fill="none" 
+                  stroke="rgba(16, 185, 129, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                <foreignObject 
+                  x="155" 
+                  y="387" 
+                  width="110" 
+                  height="50"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-emerald-500/50 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md shadow-emerald-950/20">
+                    <div className="font-bold text-emerald-400 border-b border-emerald-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>TRAIN #22846</span>
+                      <span>✓ SAFE</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>CURRENT SPD:</span> <span className="text-emerald-400 font-bold">0 KM/H</span></div>
+                    <div className="text-white flex justify-between"><span>SIGNAL ALARM:</span> <span>SAFE-STOP</span></div>
+                    <div className="text-emerald-400 font-bold flex justify-between"><span>BRAKE:</span> <span>ENGAGED</span></div>
+                  </div>
+                </foreignObject>
 
-                {/* Warned Train B stops (green) */}
-                <circle cx="395" cy="388" r="5" fill="#10B981" className="glow-green" />
-                <text x="407" y="392" fill="#10B981" fontSize="8" fontFamily="monospace" fontWeight="bold">
-                  Train #18401 SECURED ✓
-                </text>
+                {/* Warned Train B stops (green check) */}
+                <circle cx="395" cy="388" r="12" fill="#10B981" fillOpacity="0.15" />
+                <circle cx="395" cy="388" r="4.5" fill="#10B981" className="glow-green" />
+                <circle cx="395" cy="388" r="18" fill="none" stroke="#10B981" strokeWidth="0.8" className="pulse-marker" />
+                
+                <path 
+                  d="M 395 388 L 435 388 L 435 348 H 485" 
+                  fill="none" 
+                  stroke="rgba(16, 185, 129, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                <foreignObject 
+                  x="490" 
+                  y="303" 
+                  width="110" 
+                  height="50"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-emerald-500/50 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md shadow-emerald-950/20">
+                    <div className="font-bold text-emerald-400 border-b border-emerald-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>TRAIN #18401</span>
+                      <span>✓ SAFE</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>CURRENT SPD:</span> <span className="text-emerald-400 font-bold">0 KM/H</span></div>
+                    <div className="text-white flex justify-between"><span>SIGNAL ALARM:</span> <span>SAFE-STOP</span></div>
+                    <div className="text-emerald-400 font-bold flex justify-between"><span>BRAKE:</span> <span>ENGAGED</span></div>
+                  </div>
+                </foreignObject>
 
                 {/* Repair Crew dispatched near Bhubaneswar */}
                 <g transform="translate(378, 420)" className="animate-bounce">
-                  <rect x="-4" y="-4" width="8" height="8" rx="1" fill="#3B82F6" />
-                  <text x="8" y="2" fill="#3B82F6" fontSize="7" fontFamily="monospace" fontWeight="bold">
-                    CREW B7 EN ROUTE
-                  </text>
+                  <rect x="-4" y="-4" width="8" height="8" rx="1.5" fill="#3B82F6" className="glow-blue" />
+                  <circle cx="0" cy="0" r="10" fill="none" stroke="#3B82F6" strokeWidth="1.2" className="beacon-pulse-ring" />
                 </g>
+                
+                <path 
+                  d={`M 378 420 L 418 420 H 458`} 
+                  fill="none" 
+                  stroke="rgba(59, 130, 246, 0.6)" 
+                  strokeWidth="0.8" 
+                  strokeDasharray="2 2"
+                />
+                <foreignObject 
+                  x="463" 
+                  y="395" 
+                  width="110" 
+                  height="45"
+                  className="overflow-visible"
+                >
+                  <div className="bg-slate-950/90 border border-blue-500/50 p-1.5 rounded font-mono text-[8px] space-y-0.5 leading-none shadow-md shadow-blue-950/20">
+                    <div className="font-bold text-blue-400 border-b border-blue-500/20 pb-0.5 mb-1 flex justify-between">
+                      <span>REPAIR CREW</span>
+                    </div>
+                    <div className="text-white flex justify-between"><span>ZONE SECTOR:</span> <span>B7</span></div>
+                    <div className="text-white flex justify-between"><span>STATUS:</span> <span className="text-blue-400 font-bold">DISPATCHED</span></div>
+                  </div>
+                </foreignObject>
               </g>
             )}
           </svg>
 
+          {/* Floating Hover State Tooltip */}
+          {hoveredState && (
+            <div 
+              className="absolute glass-tooltip p-3 rounded-lg z-30 pointer-events-none w-56 flex flex-col gap-1.5 text-[10px] font-mono shadow-lg"
+              style={{ 
+                left: `${tooltipPos.x + 15}px`, 
+                top: `${tooltipPos.y + 15}px` 
+              }}
+            >
+              <div className="flex justify-between items-center border-b border-sky-500/20 pb-1.5 mb-0.5">
+                <span className="font-bold text-sky-400 tracking-wider">{hoveredState.name}</span>
+                <span className="text-[8px] bg-slate-900 border border-slate-800 px-1 rounded text-slate-400">ZONE {hoveredState.id.toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">SCAN MONITOR:</span>
+                <span className={`font-bold ${hoveredState.scannerStatus.includes('ACTIVE') ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>
+                  {hoveredState.scannerStatus}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">SENSORS ONLINE:</span>
+                <span className="text-white font-bold">{hoveredState.sensorsOnline} / {hoveredState.sensorsTotal}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">SIGNAL GAIN:</span>
+                <span className="text-sky-400 font-bold">{hoveredState.signalPercent}%</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">TRAFFIC FLOW:</span>
+                <span className={`font-bold ${hoveredState.trafficFlow === 'NORMAL' ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>
+                  {hoveredState.trafficFlow}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Junction Hub Interactive Click Modal */}
+          {activeHub && (
+            <div className="absolute bottom-16 right-4 bg-slate-950/95 border border-emerald-500/40 p-3 rounded-lg z-20 w-48 text-[10px] font-mono shadow-lg shadow-black/80">
+              <div className="flex justify-between items-center border-b border-emerald-500/20 pb-1 mb-1.5 text-emerald-400 font-bold">
+                <span>[ HUB: {activeHub.name} ]</span>
+                <button onClick={() => setActiveHub(null)} className="text-slate-400 hover:text-white font-sans text-xs shrink-0 cursor-pointer">×</button>
+              </div>
+              <div className="space-y-1 text-slate-300">
+                <div className="flex justify-between">
+                  <span>TELEMETRY:</span>
+                  <span className="text-emerald-400 font-bold">ONLINE</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>DEPOT STATUS:</span>
+                  <span className="text-white">STANDBY</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>COORDINATES:</span>
+                  <span className="text-slate-400">{activeHub.y}°N, {activeHub.x}°E</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>SCAN CHANNELS:</span>
+                  <span className="text-white">12 ACTIVE</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Dynamic Map Status overlay text */}
           <div className="absolute bottom-4 left-4 right-4 bg-slate-950/80 border border-slate-900 p-2.5 rounded text-center z-15 backdrop-blur-sm">
-            <span className="text-[10.5px] font-mono tracking-wider text-slate-400 block">
+            <span className="text-[10px] font-mono tracking-wider text-slate-400 block">
               {activeStep === 0 && 'STEP 1: Locomotive Accelerometers Scan Rail Structural Vibration'}
               {activeStep === 1 && 'STEP 2: Vibration Deviation Exceeds Threshold — Critical Crack Verified'}
               {activeStep === 2 && 'STEP 3: Spatial Agent Analyzes Rail Schedule & Identifies Collision Risk'}

@@ -33,6 +33,22 @@
   filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.7));
 }
 
+.glow-neon-blue {
+  filter: drop-shadow(0 0 5px rgba(14, 165, 233, 0.85));
+}
+
+.glow-neon-amber {
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.85));
+}
+
+.glow-neon-red {
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.95));
+}
+
+.glow-neon-green {
+  filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.85));
+}
+
 /* Pulse animation for map fault marker */
 @keyframes map-pulse {
   0%, 100% {
@@ -40,14 +56,31 @@
     opacity: 1;
   }
   50% {
-    transform: scale(1.6);
-    opacity: 0.4;
+    transform: scale(1.5);
+    opacity: 0.3;
   }
 }
 
 .pulse-marker {
   transform-origin: center;
   animation: map-pulse 1.8s ease-in-out infinite;
+}
+
+/* Secondary node beacon pulse */
+@keyframes beacon-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(2.2);
+    opacity: 0.15;
+  }
+}
+
+.beacon-pulse-ring {
+  transform-origin: center;
+  animation: beacon-pulse 2.2s ease-in-out infinite;
 }
 
 /* Waveform path drawing animation */
@@ -80,6 +113,64 @@
   animation: fade-in 0.4s ease-out forwards;
 }
 
+/* Radar Sweep indicator rotation */
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep-indicator {
+  transform-origin: 306px 348px;
+  animation: radar-sweep 12s linear infinite;
+}
+
+/* Slow spin for coordinates compass */
+@keyframes slow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-slow-spin {
+  transform-origin: 306px 348px;
+  animation: slow-spin 60s linear infinite;
+}
+
+.animate-slow-spin-reverse {
+  transform-origin: 306px 348px;
+  animation: slow-spin 90s linear infinite reverse;
+}
+
+/* Floating Glassmorphic Tooltip Card */
+.glass-tooltip {
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(56, 189, 248, 0.05);
+}
+
+/* Cyber corner brackets */
+.cyber-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(56, 189, 248, 0.35);
+  pointer-events: none;
+  z-index: 15;
+}
+.cyber-corner-tl { top: 12px; left: 12px; border-top: 2px solid; border-left: 2px solid; }
+.cyber-corner-tr { top: 12px; right: 12px; border-top: 2px solid; border-right: 2px solid; }
+.cyber-corner-bl { bottom: 12px; left: 12px; border-bottom: 2px solid; border-left: 2px solid; }
+.cyber-corner-br { bottom: 12px; right: 12px; border-bottom: 2px solid; border-right: 2px solid; }
+
 /* Custom scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -91,3 +182,4 @@
   background: #1e293b;
   border-radius: 2px;
 }
+
