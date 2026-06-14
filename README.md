@@ -4,7 +4,7 @@
 > *"Turning every train into a track inspector to save lives, with zero new hardware."*
 
 ---
-**WEBSITE URL*** :- https://faraway-railway.vercel.app/
+**WEBSITE URL** :- https://faraway-railway.vercel.app/
 ## 📖 Concept Overview
 
 **PULSE RAIL** is a story-driven collaborative railway safety system. In traditional systems, track inspections require expensive dedicated inspection cars, optical cameras, or manual track walkers. **PULSE RAIL** eliminates this friction by utilizing the **axle-box accelerometers** already present on modern locomotives. 
