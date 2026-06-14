@@ -129,19 +129,21 @@ export default function App() {
         
         if (activeStep === 0) {
           if (isAutoPlaying) {
-            // Autoplay: inject spike if subProgress is between 30 and 75
+            // Autoplay: inject chaotic noise modulated by sine envelope
             if (subProgress > 30 && subProgress < 75) {
               const x = (subProgress - 30) / 45; // 0 to 1
-              const peak = Math.sin(x * Math.PI) * 38;
-              val += peak;
+              const envelope = Math.sin(x * Math.PI);
+              const spikeNoise = 10 + Math.random() * 38; // Jagged noise
+              val += envelope * spikeNoise;
             }
           } else {
             // Manual: periodically inject severe spikes
             tickCount = (tickCount + 1) % 40;
             if (tickCount > 10 && tickCount < 25) {
-              const x = (tickCount - 10) / 15;
-              const peak = Math.sin(x * Math.PI) * 42; // More severe peak
-              val += peak;
+              const x = (tickCount - 10) / 15; // 0 to 1
+              const envelope = Math.sin(x * Math.PI);
+              const spikeNoise = 15 + Math.random() * 42; // Severe jagged noise
+              val += envelope * spikeNoise;
             }
           }
         }
