@@ -183,3 +183,9 @@
   border-radius: 2px;
 }
 
+/* Custom grid column configurations for segment heatmap */
+.grid-cols-20 {
+  display: grid;
+  grid-template-columns: repeat(20, minmax(0, 1fr));
+}
+
