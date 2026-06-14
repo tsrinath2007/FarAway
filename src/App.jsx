@@ -71,7 +71,9 @@ export default function App() {
   const [activeStep, setActiveStep] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [subProgress, setSubProgress] = useState(0); // 0 to 100 within a step
-  const [vibrations, setVibrations] = useState(Array(40).fill(12));
+  const [vibrations, setVibrations] = useState(() => 
+    Array.from({ length: 40 }, () => 10 + Math.random() * 5)
+  );
   const [time, setTime] = useState(new Date());
 
   // State for interactive map hovers
@@ -105,6 +107,7 @@ export default function App() {
 
   // Handle live scrolling vibration graph in Card 1
   useEffect(() => {
+    let tickCount = 0;
     const timer = setInterval(() => {
       setVibrations((prev) => {
         const next = [...prev];
@@ -112,11 +115,23 @@ export default function App() {
         
         let val = 10 + Math.random() * 5; // Base normal signal
         
-        // Inject spike if on Step 1 and subProgress is between 30 and 75
-        if (activeStep === 0 && subProgress > 30 && subProgress < 75) {
-          const x = (subProgress - 30) / 45; // 0 to 1
-          const peak = Math.sin(x * Math.PI) * 38;
-          val += peak;
+        if (activeStep === 0) {
+          if (isAutoPlaying) {
+            // Autoplay: inject spike if subProgress is between 30 and 75
+            if (subProgress > 30 && subProgress < 75) {
+              const x = (subProgress - 30) / 45; // 0 to 1
+              const peak = Math.sin(x * Math.PI) * 38;
+              val += peak;
+            }
+          } else {
+            // Manual: periodically inject severe spikes
+            tickCount = (tickCount + 1) % 40;
+            if (tickCount > 10 && tickCount < 25) {
+              const x = (tickCount - 10) / 15;
+              const peak = Math.sin(x * Math.PI) * 42; // More severe peak
+              val += peak;
+            }
+          }
         }
         
         next.push(val);
@@ -125,7 +140,7 @@ export default function App() {
     }, 70);
 
     return () => clearInterval(timer);
-  }, [activeStep, subProgress]);
+  }, [activeStep, subProgress, isAutoPlaying]);
 
   // Jump to step manually
   const goToStep = (stepIndex) => {
