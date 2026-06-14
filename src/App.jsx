@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Train, ChevronLeft, ChevronRight } from 'lucide-react';
+import indiaMap from '@svg-maps/india';
 
 export default function App() {
   const [activeStep, setActiveStep] = useState(0);
@@ -63,9 +64,21 @@ export default function App() {
           </div>
         </div>
 
-        {/* Tactical Map Container placeholder */}
-        <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex items-center justify-center">
-          <span className="text-slate-500 font-mono text-xs">TACTICAL MAP TELEMETRY UNDER DEVELOPMENT</span>
+        {/* Detailed India Map Container */}
+        <div className="flex-1 bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+          <svg viewBox={indiaMap.viewBox} className="w-full max-h-[440px] relative z-10">
+            {indiaMap.locations.map((loc) => (
+              <path
+                key={loc.id}
+                d={loc.path}
+                name={loc.name}
+                id={loc.id}
+                fill="#060913"
+                stroke="#151E2E"
+                strokeWidth="0.8"
+              />
+            ))}
+          </svg>
         </div>
 
       </main>
