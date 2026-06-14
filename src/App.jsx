@@ -75,10 +75,22 @@ export default function App() {
     Array.from({ length: 40 }, () => 10 + Math.random() * 5)
   );
   const [time, setTime] = useState(new Date());
+  const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
 
   // State for interactive map hovers
   const [hoveredState, setHoveredState] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  // Escape key listener to close modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsHowItWorksOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Live ticking clock
   useEffect(() => {
@@ -245,6 +257,15 @@ export default function App() {
 
           {/* Autoplay status and quick controls */}
           <div className="flex items-center gap-4">
+            {/* Conceptual Slide Modal trigger */}
+            <button 
+              onClick={() => setIsHowItWorksOpen(true)}
+              className="px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide bg-[#091127] text-sky-400 border border-slate-900 hover:text-white hover:border-slate-800 transition-all cursor-pointer flex items-center gap-2"
+            >
+              <Cpu className="h-3.5 w-3.5 text-sky-400" />
+              HOW IT WORKS
+            </button>
+
             <button 
               onClick={() => setIsAutoPlaying(!isAutoPlaying)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide border transition-all ${
@@ -929,6 +950,217 @@ export default function App() {
 
         </div>
       </footer>
+
+      {/* HOW IT WORKS MODAL OVERLAY */}
+      {isHowItWorksOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsHowItWorksOpen(false)}
+        >
+          <div 
+            className="bg-[#070e20] border border-slate-900 rounded-3xl w-full max-w-7xl max-h-[90vh] overflow-y-auto p-6 md:p-8 relative shadow-2xl flex flex-col gap-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            
+            {/* Cyber Corner Brackets */}
+            <div className="cyber-corner cyber-corner-tl"></div>
+            <div className="cyber-corner cyber-corner-tr"></div>
+            <div className="cyber-corner cyber-corner-bl"></div>
+            <div className="cyber-corner cyber-corner-br"></div>
+
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-slate-900 pb-4">
+              <div>
+                <span className="text-[10px] font-mono text-sky-400 uppercase tracking-widest font-bold">Concept Overview</span>
+                <h2 className="text-2xl font-black text-white leading-tight mt-1">
+                  From detection to continuous improvement.
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">A closed-loop system that gets smarter with every train.</p>
+              </div>
+              <button 
+                onClick={() => setIsHowItWorksOpen(false)}
+                className="px-3 py-1.5 rounded-lg border border-slate-900 hover:bg-slate-900 text-slate-400 hover:text-white transition-all cursor-pointer text-xs font-bold"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex flex-col lg:flex-row gap-6 items-stretch">
+              
+              {/* Left Column: 4-Step Closed Loop Flow */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+                
+                {/* Step 1 */}
+                <div className="bg-[#0a142c] border border-slate-900 rounded-2xl p-4 flex flex-col justify-between gap-4 relative">
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-teal-500 rounded-t-2xl"></div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-teal-500 text-slate-950 flex items-center justify-center text-[10px] font-black font-mono">1</span>
+                    <span className="text-xs font-bold text-white">Detect the fault</span>
+                  </div>
+                  
+                  {/* Accelerometer SVG Graphic */}
+                  <div className="h-20 bg-slate-950/60 rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="flex flex-col items-center gap-1">
+                      <Train className="h-8 w-8 text-teal-400" />
+                      <span className="text-[8px] font-mono text-teal-400/80 tracking-widest">LOCO SENSOR</span>
+                    </div>
+                    {/* Simulated pulse spike */}
+                    <svg className="absolute inset-x-0 bottom-0 h-6 w-full" stroke="rgba(20, 184, 166, 0.4)" strokeWidth="1.5" fill="none">
+                      <path d="M 0 12 L 80 12 L 90 2 L 100 22 L 110 12 L 300 12" />
+                    </svg>
+                  </div>
+                  
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    Axle-box accelerometers continuously record vibrations as the train moves. On-board models analyze the data in real time and detect abnormal patterns.
+                  </p>
+                  
+                  <div className="bg-teal-500/10 border border-teal-500/20 py-1 px-2 rounded-lg flex items-center gap-1.5 text-[9px] text-teal-300 font-bold">
+                    <CheckCircle2 className="h-3 w-3 text-teal-400" />
+                    Fault detected & location tagged.
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="bg-[#0a142c] border border-slate-900 rounded-2xl p-4 flex flex-col justify-between gap-4 relative">
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-amber-500 rounded-t-2xl"></div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black font-mono">2</span>
+                    <span className="text-xs font-bold text-white">Store in database</span>
+                  </div>
+                  
+                  {/* Database SVG Graphic */}
+                  <div className="h-20 bg-slate-950/60 rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="flex flex-col items-center gap-1">
+                      <Cpu className="h-8 w-8 text-amber-400" />
+                      <span className="text-[8px] font-mono text-amber-400/80 tracking-widest">CLOUD UPLOAD</span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    Detected fault data and location are securely uploaded to the central database in real time. The system creates a live track health map for the entire network.
+                  </p>
+                  
+                  <div className="bg-amber-500/10 border border-amber-500/20 py-1 px-2 rounded-lg flex items-center gap-1.5 text-[9px] text-amber-300 font-bold">
+                    <CheckCircle2 className="h-3 w-3 text-amber-400" />
+                    Data stored & globally available.
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="bg-[#0a142c] border border-slate-900 rounded-2xl p-4 flex flex-col justify-between gap-4 relative">
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-500 rounded-t-2xl"></div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-red-500 text-slate-950 flex items-center justify-center text-[10px] font-black font-mono">3</span>
+                    <span className="text-xs font-bold text-white">Warn the next train</span>
+                  </div>
+                  
+                  {/* Alert warning SVG Graphic */}
+                  <div className="h-20 bg-slate-950/60 rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="flex flex-col items-center gap-1">
+                      <AlertCircle className="h-8 w-8 text-red-400" />
+                      <span className="text-[8px] font-mono text-red-400/80 tracking-widest">COLLISION SHIELD</span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    When another train approaches the same location, the system already knows the risk. It sends alerts to the loco pilot and control systems to slow down in advance.
+                  </p>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 py-1 px-2 rounded-lg flex items-center gap-1.5 text-[9px] text-red-300 font-bold">
+                    <CheckCircle2 className="h-3 w-3 text-red-400" />
+                    Prevents accidents. Saves lives.
+                  </div>
+                </div>
+
+                {/* Step 4 */}
+                <div className="bg-[#0a142c] border border-slate-900 rounded-2xl p-4 flex flex-col justify-between gap-4 relative">
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-sky-500 rounded-t-2xl"></div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 flex items-center justify-center text-[10px] font-black font-mono">4</span>
+                    <span className="text-xs font-bold text-white">Improve the AI</span>
+                  </div>
+                  
+                  {/* Feedback cycle SVG Graphic */}
+                  <div className="h-20 bg-slate-950/60 rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="flex flex-col items-center gap-1">
+                      <Activity className="h-8 w-8 text-sky-400" />
+                      <span className="text-[8px] font-mono text-sky-400/80 tracking-widest">AI RE-TRAINING</span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    If an alert in Step 3 turns out to be inaccurate (false alarm) or missed, the system learns from it. The AI model is continuously updated with new data.
+                  </p>
+                  
+                  <div className="bg-sky-500/10 border border-sky-500/20 py-1 px-2 rounded-lg flex items-center gap-1.5 text-[9px] text-sky-300 font-bold">
+                    <CheckCircle2 className="h-3 w-3 text-sky-400" />
+                    Smarter system. Fewer mistakes.
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Column: Highlights & Value Proposition */}
+              <div className="w-full lg:w-[28%] bg-[#081127] border border-slate-900 rounded-2xl p-5 flex flex-col justify-between gap-4">
+                
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-300 leading-relaxed pb-3 border-b border-slate-900">
+                    Use axle-box accelerometers already mounted on trains to monitor track health without adding any new hardware.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="text-[10px] font-mono text-red-500 uppercase tracking-wider font-extrabold">Key Highlights</h4>
+                  <ul className="mt-2.5 space-y-2 text-[11px] text-slate-300">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                      Real-time detection using existing sensors
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                      Centralized database & live track map
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                      Advance slowdown warnings to trains
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                      AI learns from feedback loops
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="border-t border-slate-900 pt-3">
+                  <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-wider font-extrabold">Why It Works</h4>
+                  <ul className="mt-2.5 space-y-2 text-[11px] text-slate-300">
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
+                      Cost-effective (existing hardware)
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
+                      Easy to deploy immediately
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
+                      Powerful deep learning models
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
+                      Scalable to thousands of trains
+                    </li>
+                  </ul>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
